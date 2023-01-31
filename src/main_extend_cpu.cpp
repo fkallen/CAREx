@@ -32,8 +32,8 @@ void printCommandlineArguments(std::ostream& out, const cxxopts::ParseResult& pa
 bool checkMandatoryArguments(const cxxopts::ParseResult& parseresults){
 
 	const std::vector<std::string> mandatory = {
-		"inputfiles", "outdir", "outputfilenames", "coverage",
-		"minFragmentSize", "maxFragmentSize", "pairmode"
+		"inputfiles", "outdir", "coverage",
+		"minFragmentSize", "maxFragmentSize"
 	};
 
 	bool success = true;
@@ -62,7 +62,7 @@ int main(int argc, char** argv){
 	bool help = false;
 	bool showVersion = false;
 
-	cxxopts::Options commandLineOptions(argv[0], "CARE-Extender");
+	cxxopts::Options commandLineOptions(argv[0], "CAREx CPU");
 
 	addMandatoryOptions(commandLineOptions);
 	addMandatoryOptionsExtend(commandLineOptions);
@@ -79,7 +79,7 @@ int main(int argc, char** argv){
 	auto parseresults = commandLineOptions.parse(argc, argv);
 
 	if(showVersion){
-		std::cout << "CARE version " << CARE_VERSION_STRING << std::endl;
+		std::cout << "CAREx version " << CAREX_VERSION_STRING << std::endl;
 		std::exit(0);
 	}
 
@@ -123,7 +123,7 @@ int main(int argc, char** argv){
     }
 
 	std::cout << std::boolalpha;
-	std::cout << "CARE EXTEND CPU  will be started with the following parameters:\n";
+	std::cout << "CAREx CPU  will be started with the following parameters:\n";
 	std::cout << "----------------------------------------\n";
 
 	programOptions.printMandatoryOptions(std::cout);
@@ -137,10 +137,10 @@ int main(int argc, char** argv){
 	std::cout << "----------------------------------------\n";
 	std::cout << std::noboolalpha;
 
-	if(programOptions.pairType == SequencePairType::SingleEnd || programOptions.pairType == SequencePairType::Invalid){
-		std::cout << "Only paired-end extension is supported. Abort.\n";
-		std::exit(0);
-	}
+	// if(programOptions.pairType == SequencePairType::SingleEnd || programOptions.pairType == SequencePairType::Invalid){
+	// 	std::cout << "Only paired-end extension is supported. Abort.\n";
+	// 	std::exit(0);
+	// }
 
     const int numThreads = programOptions.threads;
 

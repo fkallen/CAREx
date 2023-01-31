@@ -18,7 +18,7 @@ void constructOutputFileFromExtensionResults(
     SerializedObjectStorage& partialResults, 
     FileFormat outputFormat,
     const std::string& extendedOutputfile,
-    const std::vector<std::string>& outputfiles,
+    const std::string& remainingOutputfile,
     SequencePairType pairmode,
     bool outputToSingleFile
 );
@@ -35,7 +35,7 @@ void constructOutputFileFromExtensionResults(
     const std::vector<read_number>& idsOfNotExtended,
     FileFormat outputFormat,
     const std::string& extendedOutputfile,
-    const std::vector<std::string>& outputfiles,
+    const std::string& remainingOutputfile,
     SequencePairType pairmode
 );
 

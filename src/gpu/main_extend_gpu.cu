@@ -32,8 +32,8 @@ void printCommandlineArguments(std::ostream& out, const cxxopts::ParseResult& pa
 bool checkMandatoryArguments(const cxxopts::ParseResult& parseresults){
 
 	const std::vector<std::string> mandatory = {
-		"inputfiles", "outdir", "outputfilenames", "coverage",
-		"minFragmentSize", "maxFragmentSize", "pairmode"
+		"inputfiles", "outdir", "coverage",
+		"minFragmentSize", "maxFragmentSize"
 	};
 
 	bool success = true;
@@ -46,6 +46,28 @@ bool checkMandatoryArguments(const cxxopts::ParseResult& parseresults){
 
 	return success;
 }
+
+void listAvailableGpus(std::ostream& os){
+	int numGpus = 0;
+    cudaError_t status = cudaGetDeviceCount(&numGpus);
+	if(status == cudaSuccess){
+		os << "Found " << numGpus << " CUDA-capable GPUs in your system\n";
+		for(int deviceId = 0; deviceId < numGpus; deviceId++){
+			os << "Device ID " << deviceId << ": ";
+
+			cudaDeviceProp prop;
+			status = cudaGetDeviceProperties(&prop, deviceId);
+			if(status == cudaSuccess){
+				os << prop.name << ", compute capability " << prop.major << "." << prop.minor << "\n";
+			}else{
+				os << "Error: Could not retrieve device properties for device ID " << deviceId << "\n";
+			}
+		}
+	}else{
+		os << "Error: Could not determine number of GPUs\n";
+	}
+}
+
 
 template<class T>
 std::string tostring(const T& t){
@@ -61,8 +83,9 @@ int main(int argc, char** argv){
 
 	bool help = false;
 	bool showVersion = false;
+	bool printAvailableGpus = false;
 
-	cxxopts::Options commandLineOptions(argv[0], "CARE-Extender");
+	cxxopts::Options commandLineOptions(argv[0], "CAREx GPU");
 
 	addMandatoryOptions(commandLineOptions);
 	addMandatoryOptionsExtend(commandLineOptions);
@@ -72,14 +95,17 @@ int main(int argc, char** argv){
 	addAdditionalOptionsExtend(commandLineOptions);
 	addAdditionalOptionsExtendGpu(commandLineOptions);
 
-	commandLineOptions.add_options("Additional")			
+	commandLineOptions.add_options("Additional")
 		("help", "Show this help message", cxxopts::value<bool>(help))
-		("version", "Print version", cxxopts::value<bool>(showVersion));
+		("version", "Print version", cxxopts::value<bool>(showVersion))
+		("listGpus", "Print a list of available GPUs in the system and their corresponding device ID", cxxopts::value<bool>(printAvailableGpus));
+
+
 
 	auto parseresults = commandLineOptions.parse(argc, argv);
 
 	if(showVersion){
-		std::cout << "CARE-Extend version " << CARE_VERSION_STRING << std::endl;
+		std::cout << "CAREx version " << CAREX_VERSION_STRING << std::endl;
 		std::exit(0);
 	}
 
@@ -87,6 +113,12 @@ int main(int argc, char** argv){
 		std::cout << commandLineOptions.help({"", "Mandatory", "Additional"}) << std::endl;
 		std::exit(0);
 	}
+
+	if(printAvailableGpus){
+		listAvailableGpus(std::cout);
+		std::exit(0);
+	}
+
 
 	const bool mandatoryPresent = checkMandatoryArguments(parseresults);
 	if(!mandatoryPresent){
@@ -132,10 +164,10 @@ int main(int argc, char** argv){
 	std::cout << "----------------------------------------\n";
 	std::cout << std::noboolalpha;
 
-	if(programOptions.pairType == SequencePairType::SingleEnd || programOptions.pairType == SequencePairType::Invalid){
-		std::cout << "Only paired-end extension is supported. Abort.\n";
-		std::exit(0);
-	}
+	// if(programOptions.pairType == SequencePairType::SingleEnd || programOptions.pairType == SequencePairType::Invalid){
+	// 	std::cout << "Only paired-end extension is supported. Abort.\n";
+	// 	std::exit(0);
+	// }
 
 	if(!programOptions.canUseGpu){
 		std::cout << "No valid GPUs selected. Abort\n";

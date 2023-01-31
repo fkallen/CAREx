@@ -136,10 +136,8 @@ namespace care{
                 for(const auto& inputfile : programOptions.inputfiles){
                     formats.emplace_back(getFileFormat(inputfile));
                 }
-                std::vector<std::string> outputfiles;
-                for(const auto& outputfilename : programOptions.outputfilenames){
-                    outputfiles.emplace_back(programOptions.outputdirectory + "/" + outputfilename);
-                }
+                const std::string remainingOutputfile = programOptions.outputdirectory + "/" + programOptions.remainingReadsOutputfilename;
+                const std::string extendedOutputfile = programOptions.outputdirectory + "/" + programOptions.extendedReadsOutputfilename;
 
                 auto outputFormat = getFileFormat(programOptions.inputfiles[0]);
                 //no gz output
@@ -148,7 +146,6 @@ namespace care{
                 if(outputFormat == FileFormat::FASTAGZ)
                     outputFormat = FileFormat::FASTA;
 
-                const std::string extendedOutputfile = programOptions.outputdirectory + "/" + programOptions.extendedReadsOutputfilename;
 
                 if(programOptions.outputRemainingReads){
                     std::sort(notExtendedIds.begin(), notExtendedIds.end());
@@ -159,7 +156,7 @@ namespace care{
                         notExtendedIds,
                         outputFormat, 
                         extendedOutputfile,
-                        outputfiles,
+                        remainingOutputfile,
                         programOptions.pairType
                     );
                 }else{
@@ -180,8 +177,6 @@ namespace care{
                 if(outputFormat == FileFormat::FASTAGZ)
                     outputFormat = FileFormat::FASTA;
 
-                const std::string extendedOutputfile = programOptions.outputdirectory + "/" + programOptions.extendedReadsOutputfilename;
-
                 doExtend(
                     programOptions,
                     *minhasher, 
@@ -199,17 +194,13 @@ namespace care{
                 if(programOptions.outputRemainingReads){
 
                     std::sort(notExtendedIds.begin(), notExtendedIds.end());
-
-                    std::vector<std::string> outputfiles;
-                    for(const auto& outputfilename : programOptions.outputfilenames){
-                        outputfiles.emplace_back(programOptions.outputdirectory + "/" + outputfilename);
-                    }
                 
+                    const std::string remainingOutputfile = programOptions.outputdirectory + "/" + programOptions.remainingReadsOutputfilename;
                     outputUnchangedReadPairs(
                         programOptions.inputfiles,
                         notExtendedIds,
                         outputFormat,
-                        outputfiles[0]
+                        remainingOutputfile
                     );
 
                 }

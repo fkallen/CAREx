@@ -32,25 +32,6 @@ namespace care{
         }
     }
 
-    std::string to_string(CorrectionType t)
-    {
-        switch (t)
-        {
-        case CorrectionType::Classic:
-            return "Classic";
-            break;
-        case CorrectionType::Forest:
-            return "Forest";
-            break;
-        case CorrectionType::Print:
-            return "Print";
-            break;
-        default:
-            return "Forgot to name correction type";
-            break;
-        }
-    }
-
     std::string to_string(GpuDataLayout t)
     {
         switch (t)
@@ -70,10 +51,6 @@ namespace care{
     ProgramOptions::ProgramOptions(const cxxopts::ParseResult& pr){
         ProgramOptions& result = *this;
 
-        if(pr.count("correctionQualityLabels")){
-            result.outputCorrectionQualityLabels = pr["correctionQualityLabels"].as<bool>();
-        }
-
         if(pr.count("minalignmentoverlap")){
             result.min_overlap = pr["minalignmentoverlap"].as<int>();
         }
@@ -88,46 +65,16 @@ namespace care{
             result.excludeAmbiguousReads = pr["excludeAmbiguous"].as<bool>();
         }
 
-        if(pr.count("candidateCorrection")){
-            result.correctCandidates = pr["candidateCorrection"].as<bool>();
-        }
-
-        if(pr.count("correctionTypeCands")){
-            const int val = pr["correctionTypeCands"].as<int>();
-
-            switch(val){
-                case 1: result.correctionTypeCands = CorrectionType::Forest; break;
-                case 2: result.correctionTypeCands = CorrectionType::Print; break;
-                default: result.correctionTypeCands = CorrectionType::Classic; break;
-            }
-        }
-
         if(pr.count("useQualityScores")){
             result.useQualityScores = pr["useQualityScores"].as<bool>();
-        }
-
-        if(pr.count("gzoutput")){
-            result.gzoutput = pr["gzoutput"].as<bool>();
         }
 
         if(pr.count("enforceHashmapCount")){
             result.mustUseAllHashfunctions = pr["enforceHashmapCount"].as<bool>();
         }
 
-        if(pr.count("singlehash")){
-            result.singlehash = pr["singlehash"].as<bool>();
-        }
-
         if(pr.count("coverage")){
             result.estimatedCoverage = pr["coverage"].as<float>();
-        }
-
-        if(pr.count("errorfactortuning")){
-            result.estimatedErrorrate = pr["errorfactortuning"].as<float>();
-        }
-
-        if(pr.count("coveragefactortuning")){
-            result.m_coverage = pr["coveragefactortuning"].as<float>();
         }
 
         if(pr.count("kmerlength")){
@@ -149,50 +96,6 @@ namespace care{
             result.batchsize = pr["batchsize"].as<int>();
         }
 
-        if(pr.count("maxForestTreesAnchor")){
-            int n = pr["maxForestTreesAnchor"].as<int>();
-            if (n>0) result.maxForestTreesAnchor = n;
-        }
-
-        if(pr.count("maxForestTreesCands")){
-            int n = pr["maxForestTreesCands"].as<int>();
-            if (n>0) result.maxForestTreesCands = n;
-        }
-
-        if(pr.count("candidateCorrectionNewColumns")){
-            result.new_columns_to_correct = pr["candidateCorrectionNewColumns"].as<int>();
-        }
-
-        if(pr.count("correctionType")){
-            const int val = pr["correctionType"].as<int>();
-
-            switch(val){
-                case 1: result.correctionType = CorrectionType::Forest; break;
-                case 2: result.correctionType = CorrectionType::Print; break;
-                default: result.correctionType = CorrectionType::Classic; break;
-            }
-        }
-
-        if(pr.count("thresholdAnchor")){
-            float t = pr["thresholdAnchor"].as<float>();
-            result.thresholdAnchor = t>=1.0?t/100:t;
-        }
-
-        if(pr.count("thresholdCands")){
-            float t = pr["thresholdCands"].as<float>();
-            result.thresholdCands = t>=1.0?t/100:t;
-        }
-
-        if(pr.count("samplingRateAnchor")){
-            float t = pr["samplingRateAnchor"].as<float>();
-            result.sampleRateAnchor = t>1.0?t/100:t;
-        }
-
-        if(pr.count("samplingRateCands")){
-            float t = pr["samplingRateCands"].as<float>();
-            result.sampleRateCands = t>1.0?t/100:t;
-        }
-
         if(pr.count("pairedFilterThreshold")){
             result.pairedFilterThreshold = pr["pairedFilterThreshold"].as<float>();
         }
@@ -203,10 +106,6 @@ namespace care{
 
         if(pr.count("maxFragmentSize")){
             result.maxFragmentSize = pr["maxFragmentSize"].as<int>();
-        }
-
-        if(pr.count("fixedStddev")){
-            result.fixedStddev = pr["fixedStddev"].as<int>();
         }
 
         if(pr.count("fixedStepsize")){
@@ -244,34 +143,6 @@ namespace care{
             result.warpcore = pr["warpcore"].as<int>();
         }
 
-        if(pr.count("gpuCorrectorThreadConfig")){
-            std::string configString = pr["gpuCorrectorThreadConfig"].as<std::string>();
-
-            auto split = [](const std::string& str, char c) -> std::vector<std::string>{
-                std::vector<std::string> result;
-
-                std::stringstream ss(str);
-                std::string s;
-
-                while (std::getline(ss, s, c)) {
-                        result.emplace_back(s);
-                }
-
-                return result;
-            };
-        
-            auto tokens = split(configString, ':');
-            if(tokens.size() != 2){
-                throw std::runtime_error("gpuCorrectorThreadConfig wrong format. Expected: numCorrectors:numHashers");
-            }
-
-            GpuCorrectorThreadConfig x;
-            x.numCorrectors = std::stoi(tokens[0]);
-            x.numHashers = std::stoi(tokens[1]);
-
-            result.gpuCorrectorThreadConfig = x;
-        }
-
         if(pr.count("gpuExtenderThreadConfig")){
             std::string configString = pr["gpuExtenderThreadConfig"].as<std::string>();
 
@@ -290,7 +161,7 @@ namespace care{
         
             auto tokens = split(configString, ':');
             if(tokens.size() != 2){
-                throw std::runtime_error("gpuExtenderThreadConfig wrong format. Expected: numCorrectors:numHashers");
+                throw std::runtime_error("gpuExtenderThreadConfig wrong format. Expected: numExtenders:numHashers");
             }
 
             GpuExtenderThreadConfig x;
@@ -407,33 +278,18 @@ namespace care{
 		    result.outputdirectory = pr["outdir"].as<std::string>();
         }
 
-        if(pr.count("pairmode")){
-            const std::string arg = pr["pairmode"].as<std::string>();
+        // if(pr.count("pairmode")){
+        //     const std::string arg = pr["pairmode"].as<std::string>();
 
-            if(arg == "se" || arg == "SE"){
-                result.pairType = SequencePairType::SingleEnd;
-            }else if(arg == "pe" || arg == "PE"){
-                result.pairType = SequencePairType::PairedEnd;
-            }else{
-                result.pairType = SequencePairType::Invalid;
-            }
-        }  
+        //     if(arg == "se" || arg == "SE"){
+        //         result.pairType = SequencePairType::SingleEnd;
+        //     }else if(arg == "pe" || arg == "PE"){
+        //         result.pairType = SequencePairType::PairedEnd;
+        //     }else{
+        //         result.pairType = SequencePairType::Invalid;
+        //     }
+        // }  
 
-        if(pr.count("eo")){
-            result.extendedReadsOutputfilename = pr["eo"].as<std::string>();
-        }
-
-        if(pr.count("nReads")){
-		    result.nReads = pr["nReads"].as<std::uint64_t>();
-        }
-
-        if(pr.count("min_length")){
-            result.minimum_sequence_length = pr["min_length"].as<int>();
-        }
-
-        if(pr.count("max_length")){
-            result.maximum_sequence_length = pr["max_length"].as<int>();
-        }
 
         if(pr.count("save-preprocessedreads-to")){
             result.save_binary_reads_to = pr["save-preprocessedreads-to"].as<std::string>();
@@ -457,28 +313,17 @@ namespace care{
             result.tempdirectory = result.outputdirectory;
         }
 
-        if(pr.count("ml-forestfile")){
-            result.mlForestfileAnchor = pr["ml-forestfile"].as<std::string>();
-        }
-
-        if(pr.count("ml-cands-forestfile")){
-            result.mlForestfileCands = pr["ml-cands-forestfile"].as<std::string>();
-        }
-
-        if(pr.count("ml-print-forestfile")){
-            result.mlForestfilePrintAnchor = pr["ml-print-forestfile"].as<std::string>();
-        }
-
-        if(pr.count("ml-cands-print-forestfile")){
-            result.mlForestfilePrintCands = pr["ml-cands-print-forestfile"].as<std::string>();
-        }
 
         if(pr.count("inputfiles")){
             result.inputfiles = pr["inputfiles"].as<std::vector<std::string>>();
         }
 
-        if(pr.count("outputfilenames")){
-            result.outputfilenames = pr["outputfilenames"].as<std::vector<std::string>>();
+        if(pr.count("eo")){
+            result.extendedReadsOutputfilename = pr["eo"].as<std::string>();
+        }
+
+        if(pr.count("ro")){
+            result.remainingReadsOutputfilename = pr["ro"].as<std::string>();
         }
 
     }
@@ -506,11 +351,6 @@ namespace care{
         if(opt.estimatedCoverage <= 0.0f){
             valid = false;
             std::cout << "Error: estimatedCoverage must be > 0.0, is " + std::to_string(opt.estimatedCoverage) << std::endl;
-        }
-
-        if(opt.estimatedErrorrate <= 0.0f){
-            valid = false;
-            std::cout << "Error: estimatedErrorrate must be > 0.0, is " + std::to_string(opt.estimatedErrorrate) << std::endl;
         }
 
         if(opt.batchsize < 1 /*|| corOpts.batchsize > 16*/){
@@ -545,12 +385,6 @@ namespace care{
             valid = false;
             std::cout << "Error: expected minFragmentSize <= maxFragmentSize, is " 
                 << opt.minFragmentSize << std::endl;
-        }
-
-        if(opt.fixedStddev < 0){
-            valid = false;
-            std::cout << "Error: fixedStddev must be >= 0, is " 
-                << opt.fixedStddev << std::endl;
         }
 
         if(opt.fixedStepsize < 0){
@@ -618,13 +452,8 @@ namespace care{
         }
 
         {
-            if(opt.outputfilenames.size() > 1 && opt.inputfiles.size() != opt.outputfilenames.size()){
-                valid = false;
-                std::cout << "Error: An output file name must be specified for each input file. Number of input files : " << opt.inputfiles.size() << ", number of output file names: " << opt.outputfilenames.size() << "\n";
-            }
-        }
+            assert(opt.pairType == SequencePairType::PairedEnd); //single end extension not implemented
 
-        {
             //Disallow invalid type
             if(opt.pairType == SequencePairType::Invalid){
                 valid = false;
@@ -662,37 +491,11 @@ namespace care{
             stream << s << ' ';
         }
         stream << "\n";
-        stream << "Output file names: ";
-        for(auto& s : outputfilenames){
-            stream << s << ' ';
-        }
-        stream << "\n";
-        stream << "Paired mode: " << to_string(pairType) << "\n";
-    }
-
-    void ProgramOptions::printMandatoryOptionsCorrect(std::ostream&) const{
-        //nothing
-    }
-
-    void ProgramOptions::printMandatoryOptionsCorrectCpu(std::ostream&) const{
-        //nothing
-    }
-
-    void ProgramOptions::printMandatoryOptionsCorrectGpu(std::ostream& stream) const{
-        stream << "Can use GPU(s): " << canUseGpu << "\n";
-        if(canUseGpu){
-            stream << "GPU device ids: [";
-            for(int id : deviceIds){
-                stream << " " << id;
-            }
-            stream << " ]\n";
-        }
     }
 
     void ProgramOptions::printMandatoryOptionsExtend(std::ostream& stream) const{
         stream << "Minimum fragment size: " << minFragmentSize << "\n";
 	    stream << "Maximum fragment size " << maxFragmentSize << "\n";
-        stream << "Extended reads output file: " << extendedReadsOutputfilename << "\n";
     }
 
     void ProgramOptions::printMandatoryOptionsExtendCpu(std::ostream&) const{
@@ -725,11 +528,11 @@ namespace care{
         stream << "Alignment absolute required overlap: " << min_overlap << "\n";
         stream << "Alignment relative required overlap: " << min_overlap_ratio << "\n";
         stream << "Alignment max relative number of mismatches in overlap: " << maxErrorRate << "\n";
-        stream << "errorfactortuning: " << estimatedErrorrate << "\n";
-        stream << "coveragefactortuning: " << m_coverage << "\n";
         stream << "Show progress bar: " << showProgress << "\n";
         stream << "Output directory: " << outputdirectory << "\n";
         stream << "Temporary directory: " << tempdirectory << "\n";
+        stream << "Extended reads output file: " << extendedReadsOutputfilename << "\n";
+        stream << "Remaining reads output file: " << remainingReadsOutputfilename << "\n";
         stream << "Save preprocessed reads to file: " << save_binary_reads_to << "\n";
         stream << "Load preprocessed reads from file: " << load_binary_reads_from << "\n";
         stream << "Save hash tables to file: " << save_hashtables_to << "\n";
@@ -737,55 +540,14 @@ namespace care{
         stream << "Maximum memory for hash tables: " << memoryForHashtables << "\n";
         stream << "Maximum memory total: " << memoryTotalLimit << "\n";
         stream << "Hashtable load factor: " << hashtableLoadfactor << "\n";
-        stream << "Fixed number of reads: " << fixedNumberOfReads << "\n";
-        stream << "GZ compressed output: " << gzoutput << "\n";
-        //stream << "singlehash: " << singlehash << "\n";
-    
-    }
-
-    void ProgramOptions::printAdditionalOptionsCorrect(std::ostream& stream) const{
-        stream << "Correct candidate reads: " << correctCandidates << "\n";
-        stream << "Output correction quality labels: " << outputCorrectionQualityLabels << "\n";
-	    stream << "Max shift for candidate correction: " << new_columns_to_correct << "\n";
-        stream << "Correction type (anchor): " << int(correctionType) 
-		    << " (" << to_string(correctionType) << ")\n";
-	    stream << "Correction type (cands): " << int(correctionTypeCands) 
-		    << " (" << to_string(correctionTypeCands) << ")\n";
-        stream << "ml-forestfile: " << mlForestfileAnchor << "\n";
-        stream << "ml-cands-forestfile: " << mlForestfileCands << "\n";
-        stream << "classification thresholds: " << thresholdAnchor << " | " << thresholdCands << "\n";
-        stream << "anchor sampling rate: " << sampleRateAnchor << "\n";
-        stream << "cands sampling rate: " << sampleRateCands << "\n";
-        stream << "pairedFilterThreshold: " << pairedFilterThreshold << "\n";
-        stream << "maxForestTreesAnchor: " << maxForestTreesAnchor << "\n";
-        stream << "maxForestTreesCands: " << maxForestTreesCands << "\n";
+        stream << "Fixed number of reads: " << fixedNumberOfReads << "\n";    
     }
 
     void ProgramOptions::printAdditionalOptionsExtend(std::ostream& stream) const{
         stream << "Allow extension outside of gap: " << allowOutwardExtension << "\n";
         stream << "Sort extended reads: " << sortedOutput << "\n";
         stream << "Output remaining reads: " << outputRemainingReads << "\n";
-        stream << "fixedStddev: " << fixedStddev << "\n";
 	    stream << "fixedStepsize: " << fixedStepsize << "\n";
-    }
-
-    void ProgramOptions::printAdditionalOptionsCorrectCpu(std::ostream& stream) const{
-        stream << "ml-print-forestfile: " << mlForestfilePrintAnchor << "\n";
-        stream << "ml-cands-print-forestfile: " << mlForestfilePrintCands << "\n";
-    }
-
-    void ProgramOptions::printAdditionalOptionsCorrectGpu(std::ostream& stream) const{
-        stream << "Batch size: " << batchsize << "\n";
-        stream << "Warpcore: " << warpcore << "\n";
-	    stream << "Replicate GPU reads: " << replicateGpuReadData << "\n";
-        stream << "Replicate GPU hashtables " << replicateGpuHashtables << "\n";
-        stream << "GPU read layout " << to_string(gpuReadDataLayout) << "\n";
-        stream << "GPU hashtable layout " << to_string(gpuHashtableLayout) << "\n";
-        if(gpuCorrectorThreadConfig.isAutomatic()){
-            stream << "GPU corrector thread config: auto\n";
-        }else{
-            stream << "GPU corrector thread config: " << gpuCorrectorThreadConfig.numCorrectors << ":" << gpuCorrectorThreadConfig.numHashers << "\n";
-        }
     }
 
     void ProgramOptions::printAdditionalOptionsExtendCpu(std::ostream&) const{
@@ -832,29 +594,18 @@ namespace care{
             ("c,coverage", "Estimated coverage of input file. (i.e. number_of_reads * read_length / genome_size)", 
             cxxopts::value<float>())
             ("i,inputfiles", 
-                "The file(s) to correct. "
+                "The reads to extend. "
                 "Fasta or Fastq format. May be gzip'ed. "
-                "Repeat this option for each input file (e.g. -i file1.fastq -i file2.fastq). "
-                "Must not mix fasta and fastq files. "
-                "The collection of input files is treated as a single read library",
+                "Split format: two input files \"-i reads_1.fastq -i reads_2.fastq\", interleaved format: one input file\"reads_interleaved.fastq\" "
+                "Must not mix fasta and fastq files. ",
                 cxxopts::value<std::vector<std::string>>())
-            ("o,outputfilenames", 
-                "The names of outputfiles. "
-                "Repeat this option for each output file (e.g. -o file1_corrected.fastq -o file2_corrected.fastq). "
-                "If a single output file is specified, it will contain the concatenated results of all input files. "
-                "If multiple output files are specified, the number of output files must be equal to the number of input files. "
-                "In this case, output file i will contain the results of input file i. "
-                "Output files are uncompressed.", 
-                cxxopts::value<std::vector<std::string>>())
-            ("pairmode", 
-                "Type of input reads."
-                "SE / se : Single-end reads"
-                "PE / pe : Paired-end reads",
-                cxxopts::value<std::string>());
-    }
-
-    void addMandatoryOptionsCorrect(cxxopts::Options&){
-        //nothing
+            // ("pairmode", 
+            //     "Type of input reads."
+            //     "SE / se : Single-end reads"
+            //     "PE / pe : Paired-end reads",
+            //     cxxopts::value<std::string>())
+            
+            ; // end options
     }
 
     void addMandatoryOptionsExtend(cxxopts::Options& commandLineOptions){
@@ -864,19 +615,7 @@ namespace care{
                 cxxopts::value<int>())
             ("maxFragmentSize", 
                 "Maximum fragment size to consider. Must be > minFragmentSize.", 
-                cxxopts::value<int>())
-            ("eo", 
-                "The name of the output file containing extended reads",
-                cxxopts::value<std::string>());
-    }
-
-    void addMandatoryOptionsCorrectCpu(cxxopts::Options&){
-        //nothing
-    }
-
-    void addMandatoryOptionsCorrectGpu(cxxopts::Options& commandLineOptions){
-        commandLineOptions.add_options("Mandatory")
-		    ("g,gpu", "Comma-separated list of GPU device ids to be used. (Example: --gpu 0,1 to use GPU 0 and GPU 1)", cxxopts::value<std::vector<int>>());
+                cxxopts::value<int>());
     }
 
     void addMandatoryOptionsExtendCpu(cxxopts::Options&){
@@ -890,24 +629,30 @@ namespace care{
 
     void addAdditionalOptions(cxxopts::Options& commandLineOptions){
         commandLineOptions.add_options("Additional")
+            ("eo", 
+                "The name of the output file containing extended reads",
+                cxxopts::value<std::string>())
+            ("ro", 
+                "The name of the output file containing remaining reads",
+                cxxopts::value<std::string>())
             ("h,hashmaps", "The requested number of hash maps. Must be greater than 0. "
                 "The actual number of used hash maps may be lower to respect the set memory limit. "
                 "Default: " + tostring(ProgramOptions{}.numHashFunctions), 
                 cxxopts::value<int>())
             ("k,kmerlength", "The kmer length for minhashing. If 0 or missing, it is automatically determined.", cxxopts::value<int>())
             ("enforceHashmapCount",
-                "If the requested number of hash maps cannot be fullfilled, the program terminates without error correction. "
+                "If the requested number of hash maps cannot be fullfilled, the program terminates without extension. "
                 "Default: " + tostring(ProgramOptions{}.mustUseAllHashfunctions),
                 cxxopts::value<bool>()->implicit_value("true")
             )
             ("t,threads", "Maximum number of thread to use. Must be greater than 0", cxxopts::value<int>())            
-            ("q,useQualityScores", "If set, quality scores (if any) are considered during read correction. "
+            ("q,useQualityScores", "If set, quality scores (if any) are considered during read extension. "
                 "Default: " + tostring(ProgramOptions{}.useQualityScores),
             cxxopts::value<bool>()->implicit_value("true"))
             ("qualityScoreBits", "How many bits should be used to store a single quality score. Allowed values: 1,2,8. If not 8, a lossy compression via binning is used."
                 "Default: " + tostring(ProgramOptions{}.qualityScoreBits), cxxopts::value<int>())
             ("excludeAmbiguous", 
-                "If set, reads which contain at least one ambiguous nucleotide will not be corrected. "
+                "If set, reads which contain at least one ambiguous nucleotide will not be processed. "
                 "Default: " + tostring(ProgramOptions{}.excludeAmbiguousReads),
             cxxopts::value<bool>()->implicit_value("true"))
             ("maxmismatchratio", "Overlap between anchor and candidate must contain at "
@@ -921,13 +666,7 @@ namespace care{
                 "long as (minalignmentoverlapratio * candidatelength). "
                 "Default: " + tostring(ProgramOptions{}.min_overlap_ratio),
             cxxopts::value<float>())
-            ("errorfactortuning", "errorfactortuning. "
-                "Default: " + tostring(ProgramOptions{}.estimatedErrorrate),
-            cxxopts::value<float>())
-            ("coveragefactortuning", "coveragefactortuning. "
-                "Default: " + tostring(ProgramOptions{}.m_coverage),
-            cxxopts::value<float>())
-            ("p,showProgress", "If set, progress bar is shown during correction",
+            ("p,showProgress", "If set, progress information is shown during execution",
             cxxopts::value<bool>()->implicit_value("true"))
             ("tempdir", "Directory to store temporary files. Default: output directory", cxxopts::value<std::string>())
             ("save-preprocessedreads-to", "Save binary dump of data structure which stores input reads to disk",
@@ -944,42 +683,7 @@ namespace care{
             cxxopts::value<std::string>())
             ("hashloadfactor", "Load factor of hashtables. 0.0 < hashloadfactor < 1.0. Smaller values can improve the runtime at the expense of greater memory usage."
                 "Default: " + std::to_string(ProgramOptions{}.hashtableLoadfactor), cxxopts::value<float>())
-            ("fixedNumberOfReads", "Process only the first n reads. Default: " + tostring(ProgramOptions{}.fixedNumberOfReads), cxxopts::value<std::size_t>())
-            ("singlehash", "Use 1 hashtables with h smallest unique hashes. Default: " + tostring(ProgramOptions{}.singlehash), cxxopts::value<bool>())
-            ("gzoutput", "gz compressed output (very slow). Default: " + tostring(ProgramOptions{}.gzoutput), cxxopts::value<bool>());
-            
-    }
-
-    void addAdditionalOptionsCorrect(cxxopts::Options& commandLineOptions){
-        commandLineOptions.add_options("Additional")
-            ("correctionQualityLabels", "If set, correction quality label will be appended to output read headers. "
-                "Default: " + tostring(ProgramOptions{}.outputCorrectionQualityLabels),
-            cxxopts::value<bool>()->implicit_value("true"))
-            ("candidateCorrection", "If set, candidate reads will be corrected,too. "
-                "Default: " + tostring(ProgramOptions{}.correctCandidates),
-            cxxopts::value<bool>()->implicit_value("true"))
-            ("candidateCorrectionNewColumns", "If candidateCorrection is set, a candidates with an absolute shift of candidateCorrectionNewColumns compared to anchor are corrected. "
-                "Default: " + tostring(ProgramOptions{}.new_columns_to_correct),
-            cxxopts::value<int>())
-            ("correctionType", "0: Classic, 1: Forest, 2: Print . Print is only supported in the cpu version",
-                cxxopts::value<int>()->default_value("0"))
-            ("correctionTypeCands", "0: Classic, 1: Forest, 2: Print. Print is only supported in the cpu version",
-                cxxopts::value<int>()->default_value("0"))
-            ("ml-forestfile", "Path of the Random Forest classifier (Anchor correction)",
-                cxxopts::value<std::string>())
-            ("ml-cands-forestfile", "Path of the Random Forest classifier (Candidate correction)",
-                cxxopts::value<std::string>())
-            ("thresholdAnchor", "Classification threshold for anchor classifier (\"Forest\") mode",
-                cxxopts::value<float>())
-            ("thresholdCands", "Classification threshold for candidates classifier (\"Forest\") mode",
-                cxxopts::value<float>())
-            ("samplingRateAnchor", "sampling rate for anchor features (print mode)",
-                cxxopts::value<float>())
-            ("samplingRateCands", "sampling rate for candidates features (print mode)",
-                cxxopts::value<float>())
-            ("pairedFilterThreshold", "Controls alignment quality of unpaired candidates which can pass the candidate alignment filter. Candidate alignments with (num_mismatches / overlap_size) > threshold are removed.", cxxopts::value<float>())
-            ("maxForestTreesAnchor", "Max. no. of forests to load from anchor forest file. (-1 = all)", cxxopts::value<int>())
-            ("maxForestTreesCands", "Max. no. of forests to load from candidate forest file. (-1 = all)", cxxopts::value<int>());
+            ("fixedNumberOfReads", "Process only the first n reads. Default: " + tostring(ProgramOptions{}.fixedNumberOfReads), cxxopts::value<std::size_t>()); 
     }
 
     void addAdditionalOptionsExtend(cxxopts::Options& commandLineOptions){
@@ -992,38 +696,7 @@ namespace care{
                 "Default: " + tostring(ProgramOptions{}.outputRemainingReads), cxxopts::value<bool>()->implicit_value("true"))
             ("fixedStepsize", "fixedStepsize "
                 "Default: " + tostring(ProgramOptions{}.fixedStepsize),
-            cxxopts::value<int>())
-            ("fixedStddev", "fixedStddev "
-                "Default: " + tostring(ProgramOptions{}.fixedStddev),
             cxxopts::value<int>());
-    }
-
-    void addAdditionalOptionsCorrectCpu(cxxopts::Options& commandLineOptions){
-        commandLineOptions.add_options("Additional")
-            ("ml-print-forestfile", "The output file for extracted anchor features when correctionType = Print",
-                cxxopts::value<std::string>())
-            ("ml-cands-print-forestfile", "The output file for extracted candidate features when correctionTypeCands = Print",
-                cxxopts::value<std::string>());
-    }
-
-    void addAdditionalOptionsCorrectGpu(cxxopts::Options& commandLineOptions){
-        commandLineOptions.add_options("Additional")
-            ("batchsize", "Number of reads to correct in a single batch. Must be greater than 0. "
-			    "Default: " + tostring(ProgramOptions{}.batchsize),
-                cxxopts::value<int>())		
-            ("warpcore", "Enable warpcore hash tables. 0: Disabled, 1: Enabled. "
-                "Default: " + tostring(ProgramOptions{}.warpcore),
-                cxxopts::value<int>())		
-            ("replicateGpuReadData", "If reads fit into the memory of a single GPU, allow its replication to other GPUs. This can improve the runtime when multiple GPUs are used."
-                "Default: " + std::to_string(ProgramOptions{}.replicateGpuReadData), cxxopts::value<bool>())
-            ("replicateGpuHashtables", "Construct warpcore hashtables on a single GPU, then replicate them on each GPU"
-                "Default: " + std::to_string(ProgramOptions{}.replicateGpuHashtables), cxxopts::value<bool>())
-            ("gpuReadDataLayout", "GPU read layout. 0: first fit, 1: even share", cxxopts::value<int>())
-            ("gpuHashtableLayout", "GPU hash table layout. 0: first fit, 1: even share", cxxopts::value<int>())
-            ("gpuCorrectorThreadConfig", "Per-GPU thread configuration for correction. Format numCorrectors(int):numHashers(int)."
-                "Default: automatic configuration (0:0). When numCorrectors:0 is used, each corrector performs hashing itself. Recommended with gpu hashtables."
-                " Example: 2:8 . ", cxxopts::value<std::string>());
-            
     }
 
     void addAdditionalOptionsExtendCpu(cxxopts::Options&){

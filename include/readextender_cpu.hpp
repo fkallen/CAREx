@@ -999,7 +999,7 @@ private:
                     candidateLength,
                     programOptions.min_overlap_ratio,
                     programOptions.min_overlap,
-                    programOptions.estimatedErrorrate
+                    0.06f
                 );
 
                 if(task.alignmentFlags[c] == AlignmentOrientation::Forward){

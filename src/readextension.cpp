@@ -29,8 +29,6 @@
 #include <filehelpers.hpp>
 #include <readextender_common.hpp>
 
-#include <omp.h>
-
 #include <thrust/iterator/counting_iterator.h>
 
 

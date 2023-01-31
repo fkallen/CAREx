@@ -190,7 +190,7 @@ void constructOutputFileFromExtensionResults(
     const std::vector<read_number>& idsOfNotExtended,
     FileFormat outputFormat,
     const std::string& extendedOutputfile,
-    const std::vector<std::string>& outputfiles,
+    const std::string& remainingOutputfile,
     SequencePairType pairmode
 ){
 
@@ -215,7 +215,7 @@ void constructOutputFileFromExtensionResults(
             std::ref(originalReadFiles),
             std::ref(idsOfNotExtended),
             outputFormat,
-            outputfiles[0]
+            remainingOutputfile
         );
         future2.wait();
 

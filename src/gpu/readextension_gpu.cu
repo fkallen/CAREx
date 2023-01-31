@@ -540,9 +540,8 @@ struct ExtensionPipelineProducerConsumer{
     int deviceId;
 
     struct TaskBatch{
-        static int counter;
-
         int extenderId;
+        int batchId;
         GpuReadExtender::TaskData* taskData{};
         GpuReadExtender::AnchorData* anchorData{};
         GpuReadExtender::AnchorHashResult* anchorHashResult{};
@@ -552,11 +551,13 @@ struct ExtensionPipelineProducerConsumer{
         TaskBatch(
             cudaStream_t stream_,
             int extenderId_,
+            int batchId_,
             GpuReadExtender::TaskData* taskData_,
             GpuReadExtender::AnchorData* anchorData_,
             GpuReadExtender::AnchorHashResult* anchorHashResult_
         ):
-            extenderId(extenderId_++),
+            extenderId(extenderId_),
+            batchId(batchId_),
             taskData(taskData_),
             anchorData(anchorData_),
             anchorHashResult(anchorHashResult_),
@@ -651,6 +652,7 @@ struct ExtensionPipelineProducerConsumer{
             taskBatchVec.emplace_back(
                 taskStreams[i], 
                 i % numExtenders, 
+                i,
                 &taskDataVec[i],
                 &anchorDataVec[i],
                 &anchorHashResultVec[i]
@@ -699,7 +701,6 @@ struct ExtensionPipelineProducerConsumer{
                             extraHashing,
                             iterationConfig,
                             totalNumFinishedTasks,
-                            numTasksToProcess,
                             extenderId
                         );
                     },
@@ -889,7 +890,6 @@ struct ExtensionPipelineProducerConsumer{
 
                 hashedTaskBatchQueues[taskBatchPtr->extenderId].push(taskBatchPtr);
             }else{
-                //seenEmptyTaskBatchesAfterInit.insert(taskBatchPtr->id);
                 freeTaskBatchQueue.push(taskBatchPtr);
             }
         }
@@ -906,7 +906,6 @@ struct ExtensionPipelineProducerConsumer{
         bool /*extraHashing*/,
         GpuReadExtender::IterationConfig iterationConfig,
         std::atomic<std::int64_t>& totalNumFinishedTasks,
-        std::int64_t numTasksToProcess,
         int extenderId
     ){
         CUDACHECK(cudaSetDevice(deviceId));

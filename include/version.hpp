@@ -1,8 +1,8 @@
-#ifndef CARE_VERSION_HPP
-#define CARE_VERSION_HPP
+#ifndef CAREX_VERSION_HPP
+#define CAREX_VERSION_HPP
 
 
-#define CARE_VERSION_STRING "2.0.0"
+#define CAREX_VERSION_STRING "1.0.0"
 
 
 

@@ -2737,7 +2737,7 @@ struct GpuReadExtender{
         const int min_overlap = programOptions->min_overlap;
         const float maxErrorRate = programOptions->maxErrorRate;
         const float min_overlap_ratio = programOptions->min_overlap_ratio;
-        const float estimatedNucleotideErrorRate = programOptions->estimatedErrorrate;
+        const float maxRatioOpsOverOverlapForOrientationFilter = 0.06f;
 
         callRightShiftedHammingDistanceKernel(
             d_alignment_overlaps.data(),
@@ -2762,7 +2762,7 @@ struct GpuReadExtender{
             min_overlap,
             maxErrorRate,
             min_overlap_ratio,
-            estimatedNucleotideErrorRate,
+            maxRatioOpsOverOverlapForOrientationFilter,
             stream
         );
 
