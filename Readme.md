@@ -1,4 +1,4 @@
-# CAREx 1.0: Context-Aware Read Extension for Illumina reads.
+# CAREx 1.0: Context-Aware Read Extension of Illumina reads.
 
 CAREx is a software to produce longer pseudo-reads from paired-end Illumnina reads. Single-end reads are not supported.
 CAREx targets fragment sizes (a.k.a. insert size) which exceed twice the read length.
