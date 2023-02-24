@@ -757,6 +757,7 @@ namespace extension{
                 //if the longest achievable pseudo read reaches the minimum required pseudo read length
                 if(r1l + r3l - minimumOverlap >= minFragmentSize){
                     std::string r3revc = SequenceHelpers::reverseComplementSequenceDecoded(r3.extendedRead.data(), r3.extendedRead.size());
+                    std::reverse(r3.qualityScores.begin(), r3.qualityScores.end());
 
                     MismatchRatioGlueDecider decider(minimumOverlap, maxRelativeErrorInOverlap);
                     //WeightedGapGluer gluer(r1.originalLength);
