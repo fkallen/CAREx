@@ -596,6 +596,7 @@ namespace readextendergpukernels{
         const int stride = blocksize * gridDim.x;
 
         constexpr bool disableOtherStrand = false;
+        constexpr bool disableSecondaryIfPrimaryFindMate = true;
         constexpr bool debugprint = false;
 
         for(int i = tid; i < numTasks; i += stride){
@@ -613,8 +614,10 @@ namespace readextendergpukernels{
                             if(task_pairId[i + k] == task_pairId[i]){
                                 if(task_id[i + k] == task_id[i] + 1){
                                     //disable LR partner task
-                                    if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                    task_abortReason[i + k] = extension::AbortReason::PairedAnchorFinished;
+                                    if constexpr (disableSecondaryIfPrimaryFindMate){
+                                        if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
+                                        task_abortReason[i + k] = extension::AbortReason::PairedAnchorFinished;
+                                    }
                                 }else if(task_id[i+k] == task_id[i] + 2){
                                     //disable RL search task
                                     if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
@@ -656,8 +659,10 @@ namespace readextendergpukernels{
                         if(task_pairId[i + 1] == task_pairId[i]){
                             if(task_id[i + 1] == task_id[i] + 1){
                                 //disable RL partner task
-                                if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                task_abortReason[i + 1] = extension::AbortReason::PairedAnchorFinished;
+                                if constexpr (disableSecondaryIfPrimaryFindMate){
+                                    if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
+                                    task_abortReason[i + 1] = extension::AbortReason::PairedAnchorFinished;
+                                }
                             }
                         }
 
@@ -2172,7 +2177,7 @@ namespace readextendergpukernels{
         char* const smemChars = (char*)&smemForResults[0];
         char* const smemSequence = smemChars;
         char* const smemSequence2 = smemSequence + outputPitch;
-        char* const smemQualities = smemSequence2; //alias
+        char* const smemQualities = smemSequence2 + outputPitch;
 
         __shared__ typename gpu::MismatchRatioGlueDecider<blocksize>::TempStorage smemDecider;
 
@@ -2436,6 +2441,9 @@ namespace readextendergpukernels{
                             dataExtendedReadSequences[i2 * inputPitch + extendedReadLength2 - 1 - k]
                         );
                     }
+                    for(int k = group.thread_rank(); k < extendedReadLength2; k += group.size()){
+                        smemQualities[k] = dataExtendedReadQualities[i2 * inputPitch + extendedReadLength2 - 1 - k];
+                    }
 
                     group.sync();
 
@@ -2452,7 +2460,7 @@ namespace readextendergpukernels{
                             MyStringView(smemSequence2, extendedReadLength2), 
                             resultLength,
                             MyStringView(&dataExtendedReadQualities[i0 * inputPitch], extendedReadLength0),
-                            MyStringView(&dataExtendedReadQualities[i2 * inputPitch], extendedReadLength2)
+                            MyStringView(&smemQualities[0], extendedReadLength2)
                         );
 
                         if(decision.valid){

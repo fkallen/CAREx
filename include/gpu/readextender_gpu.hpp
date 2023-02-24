@@ -3718,7 +3718,7 @@ struct GpuReadExtender{
 
 
         
-        const std::size_t smem = 2 * outputPitch;
+        const std::size_t smem = 3 * outputPitch;
 
         readextendergpukernels::makePairResultsFromFinishedTasksKernel<128><<<numResults, 128, smem, stream>>>(
             numResults,
