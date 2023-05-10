@@ -956,16 +956,16 @@ namespace readextendergpukernels{
                     if(sizeofGap == 0){                                
                         //copy mate revc
 
-                        const int length = task_matelength[i];
-                        d_addAnchorLengths[offset] = length;
+                        const int mateLength = task_matelength[i];
+                        d_addAnchorLengths[offset] = mateLength;
 
-                        for(int k = threadIdx.x; k < length; k += blockDim.x){
+                        for(int k = threadIdx.x; k < mateLength; k += blockDim.x){
                             d_addTotalDecodedAnchorsFlat[offset * outputAnchorPitchInBytes + k] = task_materevc[i * task_decodedSequencePitchInBytes + k];
                             d_addTotalAnchorQualityScoresFlat[offset * outputAnchorQualityPitchInBytes + k] = task_materevcqual[i * task_qualityPitchInBytes + k];
                         }
                         d_addAnchorBeginsInExtendedRead[offset] = d_accumExtensionsLengths[i];          
                     }else{
-                        //copy result
+                        //copy until mate
                         const int length = d_outputAnchorLengths[i];
                         d_addAnchorLengths[offset] = length;
                         
@@ -977,13 +977,16 @@ namespace readextendergpukernels{
                         
 
                         //copy mate revc
-                        const int length2 = task_matelength[i];
-                        d_addAnchorLengths[(offset+1)] = length2;
+                        const int mateLength = task_matelength[i];
+                        d_addAnchorLengths[(offset+1)] = mateLength;
 
-                        for(int k = threadIdx.x; k < length; k += blockDim.x){
+                        for(int k = threadIdx.x; k < mateLength; k += blockDim.x){
                             d_addTotalDecodedAnchorsFlat[(offset+1) * outputAnchorPitchInBytes + k] = task_materevc[i * task_decodedSequencePitchInBytes + k];
                             d_addTotalAnchorQualityScoresFlat[(offset+1) * outputAnchorQualityPitchInBytes + k] = task_materevcqual[i * task_qualityPitchInBytes + k];
                         }
+
+                        //the gap between current anchor and mate begins at d_accumExtensionsLengths[i], and ends at d_accumExtensionsLengths[i] + length
+                        //mate follows after the gap
                         d_addAnchorBeginsInExtendedRead[(offset+1)] = d_accumExtensionsLengths[i] + length;
                     }
                 }

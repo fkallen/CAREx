@@ -3053,11 +3053,12 @@ struct GpuReadExtender{
         // CUDACHECK(cudaStreamSynchronizeWrapper(stream));
         // numAdd = *tmpptr1;
 
-        //tasks->size() is upper bound, use it to avoid synchronization
-        rmm::device_uvector<char> d_addTotalDecodedAnchorsFlat(tasks->size() * outputAnchorPitchInBytes, stream, mr);
-        rmm::device_uvector<char> d_addTotalAnchorQualityScoresFlat(tasks->size() * outputAnchorQualityPitchInBytes, stream, mr);
-        rmm::device_uvector<int> d_addAnchorLengths(tasks->size(), stream, mr);
-        rmm::device_uvector<int> d_addAnchorBeginsInExtendedRead(tasks->size(), stream, mr);
+        //2*tasks->size() is upper bound since each task could find the mate with sizeOfGap > 0
+        //in which case there will be 2 results. use bound to avoid synchronization
+        rmm::device_uvector<char> d_addTotalDecodedAnchorsFlat(2*tasks->size() * outputAnchorPitchInBytes, stream, mr);
+        rmm::device_uvector<char> d_addTotalAnchorQualityScoresFlat(2*tasks->size() * outputAnchorQualityPitchInBytes, stream, mr);
+        rmm::device_uvector<int> d_addAnchorLengths(2*tasks->size(), stream, mr);
+        rmm::device_uvector<int> d_addAnchorBeginsInExtendedRead(2*tasks->size(), stream, mr);
         //std::cerr << "numAdd = " << numAdd << "\n";
 
         assert(tasks->decodedSequencePitchInBytes >= outputAnchorPitchInBytes);
