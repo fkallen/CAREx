@@ -10,13 +10,14 @@
 #include <gpu/gpureadstorage.cuh>
 
 #include <functional>
+#include <optional>
 
 namespace care{
 namespace gpu{
 
     using SubmitReadyExtensionResultsCallback = std::function<void(
         std::vector<ExtendedRead> extendedReads, 
-        std::vector<EncodedExtendedRead> encodedExtendedReads,
+        std::optional<std::vector<EncodedExtendedRead>> encodedExtendedReads,
         std::vector<read_number> idsOfNotExtendedReads
     )>;
     

@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <optional>
 
 namespace care{
 
@@ -211,27 +212,51 @@ namespace care{
 
         void submitReadyResultsForSorted(
             std::vector<ExtendedRead> extendedReads, 
-            std::vector<EncodedExtendedRead> encodedExtendedReads,
+            std::optional<std::vector<EncodedExtendedRead>> encodedExtendedReadsOptional,
             std::vector<read_number> idsOfNotExtendedReads
         ){
             outputThread.enqueue(
-                [&, 
+                [&,
                     vec = std::move(extendedReads), 
-                    encvec = std::move(encodedExtendedReads),
+                    encvecOpt = std::move(encodedExtendedReadsOptional),
                     idsOfNotExtendedReads = std::move(idsOfNotExtendedReads)
                 ](){
                     notExtendedIds.insert(notExtendedIds.end(), idsOfNotExtendedReads.begin(), idsOfNotExtendedReads.end());
 
+                    // std::vector<EncodedExtendedRead> encvec;
+                    // if(encodedExtendedReadsOptional.has_value()){
+                    //     encvec = std::move(encodedExtendedReadsOptional.value())
+                    // }else{
+                    //     encvec.resize(vec.size());
+                    //     for(std::size_t i = 0; i < vec.size(); i++){
+                    //         vec[i].encodeInto(encvec[i]);
+                    //     }
+                    // }
+
                     std::vector<std::uint8_t> tempbuffer(256);
 
-                    for(const auto& er : encvec){
-                        const std::size_t serializedSize = er.getSerializedNumBytes();
-                        tempbuffer.resize(serializedSize);
+                    if(encvecOpt){
+                        for(const auto& er : encvecOpt.value()){
+                            const std::size_t serializedSize = er.getSerializedNumBytes();
+                            tempbuffer.resize(serializedSize);
 
-                        auto end = er.copyToContiguousMemory(tempbuffer.data(), tempbuffer.data() + tempbuffer.size());
-                        assert(end != nullptr);
+                            auto end = er.copyToContiguousMemory(tempbuffer.data(), tempbuffer.data() + tempbuffer.size());
+                            assert(end != nullptr);
 
-                        partialResults->insert(tempbuffer.data(), end);
+                            partialResults->insert(tempbuffer.data(), end);
+                        }
+                    }else{
+                        for(std::size_t i = 0; i < vec.size(); i++){
+                            EncodedExtendedRead er;
+                            vec[i].encodeInto(er);
+                            const std::size_t serializedSize = er.getSerializedNumBytes();
+                            tempbuffer.resize(serializedSize);
+
+                            auto end = er.copyToContiguousMemory(tempbuffer.data(), tempbuffer.data() + tempbuffer.size());
+                            assert(end != nullptr);
+
+                            partialResults->insert(tempbuffer.data(), end);
+                        }
                     }
                 }
             );
@@ -239,13 +264,13 @@ namespace care{
 
         void submitReadyResultsForUnsorted(
             std::vector<ExtendedRead> extendedReads, 
-            std::vector<EncodedExtendedRead> encodedExtendedReads,
+            std::optional<std::vector<EncodedExtendedRead>> encodedExtendedReadsOptional,
             std::vector<read_number> idsOfNotExtendedReads
         ){
             outputThread.enqueue(
                 [&, 
                     vec = std::move(extendedReads), 
-                    encvec = std::move(encodedExtendedReads),
+                    encvec = std::move(encodedExtendedReadsOptional),
                     idsOfNotExtendedReads = std::move(idsOfNotExtendedReads)
                 ](){
                     notExtendedIds.insert(notExtendedIds.end(), idsOfNotExtendedReads.begin(), idsOfNotExtendedReads.end());

@@ -31,7 +31,7 @@
 #include <numeric>
 #include <string>
 #include <vector>
-
+#include <thread>
 
 
 
@@ -185,7 +185,6 @@ extension::SplittedExtensionOutput makeAndSplitExtensionOutput(
 
 
 struct ExtensionPipeline{
-    using ReadyResultsCallback = std::function<void(std::vector<ExtendedRead>&&, std::vector<EncodedExtendedRead>&&, std::vector<read_number>&&)>;
     static constexpr bool isPairedEnd = true; 
 
     const ProgramOptions& programOptions;
@@ -195,7 +194,7 @@ struct ExtensionPipeline{
     std::size_t decodedSequencePitchInBytes;
     std::size_t qualityPitchInBytes;
     std::size_t msaColumnPitchInElements;
-    ReadyResultsCallback submitReadyResults;
+    SubmitReadyExtensionResultsCallback submitReadyResults;
     ProgressThread<read_number>* progressThread;
 
     int deviceId;
@@ -208,7 +207,7 @@ struct ExtensionPipeline{
         std::size_t decodedSequencePitchInBytes_,
         std::size_t qualityPitchInBytes_,
         std::size_t msaColumnPitchInElements_,
-        ReadyResultsCallback submitReadyResults_,
+        SubmitReadyExtensionResultsCallback submitReadyResults_,
         ProgressThread<read_number>* progressThread_
     )
     : programOptions(programOptions_),
@@ -409,14 +408,20 @@ struct ExtensionPipeline{
                 }
             }
 
-            std::vector<EncodedExtendedRead> encvec(numExtended);
-            for(std::size_t i = 0; i < numExtended; i++){
-                splittedExtOutput.extendedReads[i].encodeInto(encvec[i]);
-            }
+            // std::vector<EncodedExtendedRead> encvec(numExtended);
+            // for(std::size_t i = 0; i < numExtended; i++){
+            //     splittedExtOutput.extendedReads[i].encodeInto(encvec[i]);
+            // }
+
+            // submitReadyResults(
+            //     std::move(splittedExtOutput.extendedReads), 
+            //     std::move(encvec),
+            //     std::move(splittedExtOutput.idsOfNotExtendedReads)
+            // );
 
             submitReadyResults(
                 std::move(splittedExtOutput.extendedReads), 
-                std::move(encvec),
+                std::nullopt,
                 std::move(splittedExtOutput.idsOfNotExtendedReads)
             );
 
@@ -524,7 +529,6 @@ struct ExtensionPipeline{
 
 
 struct ExtensionPipelineProducerConsumer{
-    using ReadyResultsCallback = std::function<void(std::vector<ExtendedRead>&&, std::vector<EncodedExtendedRead>&&, std::vector<read_number>&&)>;
     static constexpr bool isPairedEnd = true; 
 
     const ProgramOptions& programOptions;
@@ -534,7 +538,7 @@ struct ExtensionPipelineProducerConsumer{
     std::size_t decodedSequencePitchInBytes;
     std::size_t qualityPitchInBytes;
     std::size_t msaColumnPitchInElements;
-    ReadyResultsCallback submitReadyResults;
+    SubmitReadyExtensionResultsCallback submitReadyResults;
     ProgressThread<read_number>* progressThread;
 
     int deviceId;
@@ -575,7 +579,7 @@ struct ExtensionPipelineProducerConsumer{
         std::size_t decodedSequencePitchInBytes_,
         std::size_t qualityPitchInBytes_,
         std::size_t msaColumnPitchInElements_,
-        ReadyResultsCallback submitReadyResults_,
+        SubmitReadyExtensionResultsCallback submitReadyResults_,
         ProgressThread<read_number>* progressThread_
     )
     : programOptions(programOptions_),
@@ -701,6 +705,7 @@ struct ExtensionPipelineProducerConsumer{
                             extraHashing,
                             iterationConfig,
                             totalNumFinishedTasks,
+                            numTasksToProcess,
                             extenderId
                         );
                     },
@@ -906,6 +911,7 @@ struct ExtensionPipelineProducerConsumer{
         bool /*extraHashing*/,
         GpuReadExtender::IterationConfig iterationConfig,
         std::atomic<std::int64_t>& totalNumFinishedTasks,
+        std::int64_t numTasksToProcess,
         int extenderId
     ){
         CUDACHECK(cudaSetDevice(deviceId));
@@ -962,14 +968,20 @@ struct ExtensionPipelineProducerConsumer{
             }
 
             const std::size_t numExtended = splittedExtOutput.extendedReads.size();
-            std::vector<EncodedExtendedRead> encvec(numExtended);
-            for(std::size_t i = 0; i < numExtended; i++){
-                splittedExtOutput.extendedReads[i].encodeInto(encvec[i]);
-            }
+            // std::vector<EncodedExtendedRead> encvec(numExtended);
+            // for(std::size_t i = 0; i < numExtended; i++){
+            //     splittedExtOutput.extendedReads[i].encodeInto(encvec[i]);
+            // }
+
+            // submitReadyResults(
+            //     std::move(splittedExtOutput.extendedReads), 
+            //     std::move(encvec),
+            //     std::move(splittedExtOutput.idsOfNotExtendedReads)
+            // );
 
             submitReadyResults(
                 std::move(splittedExtOutput.extendedReads), 
-                std::move(encvec),
+                std::nullopt,
                 std::move(splittedExtOutput.idsOfNotExtendedReads)
             );
 
@@ -1010,7 +1022,7 @@ struct ExtensionPipelineProducerConsumer{
             //std::cerr << "num finished tasks after extend " << finishedTasks.size() << "\n";
 
             totalNumFinishedTasks += (finishedAfter - finishedBefore);
-            //std::cerr << "update totalNumFinishedTasks to " << totalNumFinishedTasks << "\n";
+            //std::cerr << "update totalNumFinishedTasks to " << totalNumFinishedTasks << " / " << numTasksToProcess << "\n";
 
 
             const std::size_t limit = (programOptions.batchsize * 4);
@@ -1125,7 +1137,7 @@ void extend_gpu_pairedend(
             &progressThread
         );
     
-        std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeFirstPass();    
+        std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeFirstPass();
         pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeExtraHashingPass(pairsWhichShouldBeRepeated);
     
         submitReadyResults(
