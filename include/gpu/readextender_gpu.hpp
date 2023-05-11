@@ -3529,117 +3529,107 @@ struct GpuReadExtender{
             return;
         }
 
-        rmm::device_uvector<unsigned int> d_extendedIterationSequences(totalNumIterationResultsOfFinishedTasks * encodedSequencePitchInInts, stream, mr);
 
-        callEncodeSequencesTo2BitKernel(
-            d_extendedIterationSequences.data(),
-            finishedTasks4.soatotalDecodedAnchorsFlat.data(),
-            finishedTasks4.soatotalDecodedAnchorsLengths.data(),
-            decodedSequencePitchInBytes,
-            encodedSequencePitchInInts,
-            totalNumIterationResultsOfFinishedTasks,
-            8,
-            stream
-        );
+        rmm::device_uvector<int> d_resultLengths(numFinishedTasks, stream, mr);
 
-
-        //sequence data has been transfered to gpu. now set up remaining msa input data
-
-        rmm::device_uvector<int> d_alignment_overlaps_tmp(totalNumIterationResultsOfFinishedTasks, stream, mr);
-        rmm::device_uvector<int> d_alignment_nOps_tmp(totalNumIterationResultsOfFinishedTasks, stream, mr);
-        rmm::device_uvector<AlignmentOrientation> d_alignment_best_alignment_flags_tmp(totalNumIterationResultsOfFinishedTasks, stream, mr);
-        rmm::device_uvector<bool> d_isPairedCandidate_tmp(totalNumIterationResultsOfFinishedTasks, stream, mr);
-
-        //fill the arrays such that msa will have good quality without pairedness
-        thrust::fill_n(
-            rmm::exec_policy_nosync(stream, mr),
-            thrust::make_zip_iterator(thrust::make_tuple(
-                d_alignment_overlaps_tmp.begin(),
-                d_alignment_nOps_tmp.begin(),
-                d_alignment_best_alignment_flags_tmp.begin(),
-                d_isPairedCandidate_tmp.begin()
-            )), 
-            totalNumIterationResultsOfFinishedTasks, 
-            thrust::make_tuple(
-                gpuReadStorage->getSequenceLengthUpperBound(),
-                0,
-                AlignmentOrientation::Forward,
-                false
-            )
-        );
-                
-        //all input data ready. now set up msa
-
-        rmm::device_uvector<int> indices1(totalNumIterationResultsOfFinishedTasks, stream, mr);
-
-        const int threads = 32 * numFinishedTasks;
-
-        readextendergpukernels::segmentedIotaKernel<32><<<SDIV(threads, 128), 128, 0, stream>>>(
-            indices1.data(),
-            numFinishedTasks,
-            finishedTasks4.soaNumIterationResultsPerTask.data(),
-            finishedTasks4.soaNumIterationResultsPerTaskPrefixSum.data()
+        helpers::lambda_kernel<<<numFinishedTasks, 128>>>(
+            [
+                d_resultLengths = d_resultLengths.data(),
+                resultpitch = programOptions->maxFragmentSize,
+                anchorLengths = finishedTasks4.soainputAnchorLengths.data(),
+                shifts = finishedTasks4.soatotalAnchorBeginInExtendedRead.data(),
+                numCandsPerTask = finishedTasks4.soaNumIterationResultsPerTask.data(),
+                numCandsPerTaskPS = finishedTasks4.soaNumIterationResultsPerTaskPrefixSum.data(),
+                candidateLengths = finishedTasks4.soatotalDecodedAnchorsLengths.data(),
+                numAnchors = numFinishedTasks
+            ] __device__ (){
+                for(int a = threadIdx.x + blockDim.x * blockIdx.x; a < numAnchors; a += gridDim.x * blockDim.x){
+                    const int numCands = numCandsPerTask[a];
+                    const int candsOffset = numCandsPerTaskPS[a];
+                    if(numCands == 0){
+                        d_resultLengths[a] = anchorLengths[a];
+                    }else{
+                        const int candidateIndex = candsOffset + (numCands-1);
+                        const int shift = shifts[candidateIndex];
+                        const int candidateLength = candidateLengths[candidateIndex];
+                        d_resultLengths[a] = shift + candidateLength;
+                    }
+                }
+            }
         ); CUDACHECKASYNC;
 
-        multiMSA.construct(
-            d_alignment_overlaps_tmp.data(),
-            finishedTasks4.soatotalAnchorBeginInExtendedRead.data(),
-            d_alignment_nOps_tmp.data(),
-            d_alignment_best_alignment_flags_tmp.data(),
-            indices1.data(),
-            finishedTasks4.soaNumIterationResultsPerTask.data(),
-            finishedTasks4.soaNumIterationResultsPerTaskPrefixSum.data(),
-            finishedTasks4.soainputAnchorLengths.data(),
-            finishedTasks4.inputAnchorsEncoded.data(),
-            nullptr, //anchor qualities
-            numFinishedTasks,
-            finishedTasks4.soatotalDecodedAnchorsLengths.data(),
-            d_extendedIterationSequences.data(),
-            nullptr, //candidate qualities
-            d_isPairedCandidate_tmp.data(),
-            encodedSequencePitchInInts,
-            qualityPitchInBytes,
-            false, //useQualityScores
-            programOptions->maxErrorRate,
-            gpu::MSAColumnCount::unknown(),
-            stream
-        );
-
-        assert(multiMSA.getNumMSAs() == numFinishedTasks);
-
-        destroy(indices1, stream);
-        destroy(d_extendedIterationSequences, stream);
-        destroy(d_alignment_overlaps_tmp, stream);
-        destroy(d_alignment_nOps_tmp, stream);
-        destroy(d_alignment_best_alignment_flags_tmp, stream);
-        destroy(d_isPairedCandidate_tmp, stream);
-
-        const std::size_t resultMSAColumnPitchInElements = multiMSA.getMaximumMsaWidth();
-
-        //compute quality of consensus
-        rmm::device_uvector<char> d_consensusQuality(numFinishedTasks * resultMSAColumnPitchInElements, stream, mr);
-        rmm::device_uvector<char> d_decodedConsensus(numFinishedTasks * resultMSAColumnPitchInElements, stream, mr);
-        rmm::device_uvector<int> d_resultLengths(numFinishedTasks, stream, mr);
-        
-        multiMSA.computeConsensusQuality(
-            d_consensusQuality.data(),
-            resultMSAColumnPitchInElements,
-            stream
-        );
-
-        multiMSA.computeConsensus(
-            d_decodedConsensus.data(),
-            resultMSAColumnPitchInElements,
-            stream
-        );
-
-        multiMSA.computeMsaSizes(
+        readextendergpukernels::minmaxSingleBlockKernel<512><<<1, 512, 0, stream>>>(
             d_resultLengths.data(),
-            stream
-        );
+            numFinishedTasks,
+            rawResults.h_tmp.data()
+        ); CUDACHECKASYNC;
+        CUDACHECK(cudaStreamSynchronize(stream));
 
-        multiMSA.destroy(stream);
+        const std::size_t consensusPitch = SDIV(rawResults.h_tmp[1], 128) * 128; //padded.
 
+        rmm::device_uvector<char> d_consensusQuality(numFinishedTasks * consensusPitch, stream, mr);
+        rmm::device_uvector<char> d_decodedConsensus(numFinishedTasks * consensusPitch, stream, mr);
+        CUDACHECK(cudaMemsetAsync(d_consensusQuality.data(), 'I', d_consensusQuality.size(), stream));
+
+        helpers::lambda_kernel<<<numFinishedTasks, 128, 0, stream>>>(
+            [
+                result = d_decodedConsensus.data(),
+                d_resultLengths = d_resultLengths.data(),
+                resultpitch = consensusPitch,
+                shifts = finishedTasks4.soatotalAnchorBeginInExtendedRead.data(),
+                numCandsPerTask = finishedTasks4.soaNumIterationResultsPerTask.data(),
+                numCandsPerTaskPS = finishedTasks4.soaNumIterationResultsPerTaskPrefixSum.data(),
+                anchorLengths = finishedTasks4.soainputAnchorLengths.data(),
+                anchorData = finishedTasks4.inputAnchorsEncoded.data(),
+                numAnchors = numFinishedTasks,
+                candidateLengths = finishedTasks4.soatotalDecodedAnchorsLengths.data(),
+                candidateDataChars = finishedTasks4.soatotalDecodedAnchorsFlat.data(),
+                encodedSequencePitchInInts = encodedSequencePitchInInts,
+                decodedSequencePitchInBytes = decodedSequencePitchInBytes
+            ] __device__ (){
+                for(int a = blockIdx.x; a < numAnchors; a += gridDim.x){
+
+                    char* const myResult = result + size_t(resultpitch) * a;
+                    for(int i = threadIdx.x; i < anchorLengths[a]; i += blockDim.x){
+                        myResult[i] = SequenceHelpers::getEncodedNuc2Bit(
+                            anchorData + size_t(encodedSequencePitchInInts) * a,
+                            anchorLengths[a],
+                            i
+                        );
+                    }
+                    __syncthreads();
+
+                    const int numCands = numCandsPerTask[a];
+                    const int candsOffset = numCandsPerTaskPS[a];
+
+                    for(int n = 0; n < numCands; n++){
+                        const int candidateIndex = (candsOffset+n);
+                        const int shift = shifts[candidateIndex];
+                        const int candidateLength = candidateLengths[candidateIndex];
+                        for(int i = threadIdx.x; i < candidateLength; i += blockDim.x){
+                            myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
+                        }
+                        __syncthreads();
+                    }
+
+                    if(numCands == 0){
+                        d_resultLengths[a] = anchorLengths[a];
+                    }else{
+                        const int candidateIndex = candsOffset + (numCands-1);
+                        const int shift = shifts[candidateIndex];
+                        const int candidateLength = candidateLengths[candidateIndex];
+                        d_resultLengths[a] = shift + candidateLength;
+                    }
+                    // if(d_resultLengths[a] > resultpitch){
+                    //     printf("error length is %d, pitch is %d\n", d_resultLengths[a], resultpitch);
+                    // }
+                    // assert(d_resultLengths[a] <= resultpitch);
+                }
+            }
+        ); CUDACHECKASYNC;
+
+        // std::vector<int> h_resultLengths(d_resultLengths.size());
+        // CUDACHECK(cudaMemcpyAsync(h_resultLengths.data(), d_resultLengths.data(), sizeof(int) * d_resultLengths.size(), D2H, stream));
 
         const int numResults = numFinishedTasks / 4;
 
@@ -3655,7 +3645,7 @@ struct GpuReadExtender{
             d_consensusQuality.data(),
             finishedTasks4.mateHasBeenFound.data(),
             finishedTasks4.goodscore.data(),
-            resultMSAColumnPitchInElements,
+            consensusPitch,
             programOptions->minFragmentSize,
             programOptions->maxFragmentSize
         ); CUDACHECKASYNC;
@@ -3674,7 +3664,7 @@ struct GpuReadExtender{
         //replace positions which are covered by anchor and mate with the original data
         readextendergpukernels::applyOriginalReadsToExtendedReads<128,32>
         <<<SDIV(numFinishedTasks, 4), 128, 0, stream>>>(
-            resultMSAColumnPitchInElements,
+            consensusPitch,
             numFinishedTasks,
             d_decodedConsensus.data(),
             d_consensusQuality.data(),
@@ -3738,7 +3728,7 @@ struct GpuReadExtender{
             d_consensusQuality.data(),
             finishedTasks4.mateHasBeenFound.data(),
             finishedTasks4.goodscore.data(),
-            resultMSAColumnPitchInElements,
+            consensusPitch,
             programOptions->minFragmentSize,
             programOptions->maxFragmentSize
         ); CUDACHECKASYNC;
