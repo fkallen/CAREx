@@ -547,6 +547,7 @@ struct ExtensionPipelineProducerConsumer{
         int extenderId;
         int batchId;
         GpuReadExtender::TaskData* taskData{};
+        GpuReadExtender::TaskData* finishedTaskData{};
         GpuReadExtender::AnchorData* anchorData{};
         GpuReadExtender::AnchorHashResult* anchorHashResult{};
         CudaEvent event{cudaEventDisableTiming};
@@ -557,12 +558,14 @@ struct ExtensionPipelineProducerConsumer{
             int extenderId_,
             int batchId_,
             GpuReadExtender::TaskData* taskData_,
+            GpuReadExtender::TaskData* finishedTaskData_,
             GpuReadExtender::AnchorData* anchorData_,
             GpuReadExtender::AnchorHashResult* anchorHashResult_
         ):
             extenderId(extenderId_),
             batchId(batchId_),
             taskData(taskData_),
+            finishedTaskData(finishedTaskData_),
             anchorData(anchorData_),
             anchorHashResult(anchorHashResult_),
             stream(stream_)
@@ -637,6 +640,7 @@ struct ExtensionPipelineProducerConsumer{
 
         std::vector<CudaStream> taskStreams;
         std::vector<GpuReadExtender::TaskData> taskDataVec;
+        std::vector<GpuReadExtender::TaskData> finishedTaskDataVec;
         std::vector<GpuReadExtender::AnchorData> anchorDataVec;
         std::vector<GpuReadExtender::AnchorHashResult> anchorHashResultVec;
         std::vector<TaskBatch> taskBatchVec;
@@ -647,6 +651,7 @@ struct ExtensionPipelineProducerConsumer{
         for(int i = 0; i < numTaskBatches; i++){
             taskStreams.emplace_back();
             taskDataVec.emplace_back(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
+            finishedTaskDataVec.emplace_back(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
             anchorDataVec.emplace_back(stream, mr);
             anchorHashResultVec.emplace_back(stream, mr);            
         }
@@ -658,6 +663,7 @@ struct ExtensionPipelineProducerConsumer{
                 i % numExtenders, 
                 i,
                 &taskDataVec[i],
+                &finishedTaskDataVec[i],
                 &anchorDataVec[i],
                 &anchorHashResultVec[i]
             );
@@ -677,16 +683,29 @@ struct ExtensionPipelineProducerConsumer{
                 std::async(
                     std::launch::async,
                     [&](){
-                        hasherThreadFunc(
-                            &readIdGenerator,
-                            freeTaskBatchQueue,
-                            hashedTaskBatchQueuePerExtender,
-                            isRepeatedIteration,
-                            extraHashing,
-                            iterationConfig,
-                            totalNumFinishedTasks,
-                            numTasksToProcess
-                        );
+                        try{
+                            hasherThreadFunc(
+                                &readIdGenerator,
+                                freeTaskBatchQueue,
+                                hashedTaskBatchQueuePerExtender,
+                                isRepeatedIteration,
+                                extraHashing,
+                                iterationConfig,
+                                totalNumFinishedTasks,
+                                numTasksToProcess
+                            );
+                        }catch(...){
+                            std::cout << "Exception in hasher thread. \n";
+                            std::exception_ptr eptr = std::current_exception();
+                            try{
+                                if (eptr)
+                                    std::rethrow_exception(eptr);
+                            }catch(const std::exception& e){
+                                std::cout << "'" << e.what() << "'\n";
+                                std::exit(EXIT_FAILURE); //cannot recover
+                            }
+                            std::exit(EXIT_FAILURE); //cannot recover
+                        }
                     }
                 )
             );
@@ -697,17 +716,31 @@ struct ExtensionPipelineProducerConsumer{
                 std::async(
                     std::launch::async,
                     [&](int extenderId){
-                        return extenderThreadFunc(
-                            &readIdGenerator,
-                            freeTaskBatchQueue,
-                            hashedTaskBatchQueuePerExtender[extenderId],
-                            isRepeatedIteration,
-                            extraHashing,
-                            iterationConfig,
-                            totalNumFinishedTasks,
-                            numTasksToProcess,
-                            extenderId
-                        );
+                        try{
+                            return extenderThreadFunc(
+                                &readIdGenerator,
+                                freeTaskBatchQueue,
+                                hashedTaskBatchQueuePerExtender[extenderId],
+                                isRepeatedIteration,
+                                extraHashing,
+                                iterationConfig,
+                                totalNumFinishedTasks,
+                                numTasksToProcess,
+                                extenderId
+                            );
+                        }catch(...){
+                            std::cout << "Exception in extender thread. \n";
+                            std::exception_ptr eptr = std::current_exception();
+                            try{
+                                if (eptr)
+                                    std::rethrow_exception(eptr);
+                            }catch(const std::exception& e){
+                                std::cout << "'" << e.what() << "'\n";
+                                std::exit(EXIT_FAILURE); //cannot recover
+                            }
+                            std::exit(EXIT_FAILURE); //cannot recover
+                            return std::vector<read_number>{};
+                        }
                     },
                     t
                 )
@@ -733,6 +766,75 @@ struct ExtensionPipelineProducerConsumer{
         }
 
         
+        CUDACHECK(cudaDeviceSynchronize());
+
+        //std::cout << "Processing leftovers\n";
+
+        //process any leftover finished tasks that were not processed
+        GpuReadExtender::RawExtendResult rawExtendResult{};
+        for(auto& taskBatch : taskBatchVec){
+            cpu::QualityScoreConversion qualityConversion{};
+            auto gpuReadExtender = std::make_unique<GpuReadExtender>(
+                encodedSequencePitchInInts,
+                decodedSequencePitchInBytes,
+                qualityPitchInBytes,
+                msaColumnPitchInElements,
+                isPairedEnd,
+                gpuReadStorage, 
+                programOptions,
+                qualityConversion,
+                taskBatch.stream,
+                mr
+            );
+            
+            nvtx::push_range("output", 5);
+
+            nvtx::push_range("convert extension results", 7);
+
+            auto splittedExtOutput = makeAndSplitExtensionOutput(
+                *taskBatch.finishedTaskData, 
+                rawExtendResult, 
+                gpuReadExtender.get(), 
+                isRepeatedIteration, 
+                taskBatch.stream
+            );
+
+            nvtx::pop_range();
+
+            pairsWhichShouldBeRepeatedTmp.insert(
+                pairsWhichShouldBeRepeatedTmp.end(), 
+                splittedExtOutput.idsOfPartiallyExtendedReads.begin(), 
+                splittedExtOutput.idsOfPartiallyExtendedReads.end()
+            );
+
+            if(!programOptions.allowOutwardExtension){
+                for(auto& er : splittedExtOutput.extendedReads){
+                    er.removeOutwardExtension();
+                }
+            }
+
+            const std::size_t numExtended = splittedExtOutput.extendedReads.size();
+            // std::vector<EncodedExtendedRead> encvec(numExtended);
+            // for(std::size_t i = 0; i < numExtended; i++){
+            //     splittedExtOutput.extendedReads[i].encodeInto(encvec[i]);
+            // }
+
+            // submitReadyResults(
+            //     std::move(splittedExtOutput.extendedReads), 
+            //     std::move(encvec),
+            //     std::move(splittedExtOutput.idsOfNotExtendedReads)
+            // );
+
+            submitReadyResults(
+                std::move(splittedExtOutput.extendedReads), 
+                std::nullopt,
+                std::move(splittedExtOutput.idsOfNotExtendedReads)
+            );
+
+            progressThread->addProgress(numExtended);
+
+            nvtx::pop_range();
+        }
         CUDACHECK(cudaDeviceSynchronize());
 
         std::sort(pairsWhichShouldBeRepeatedTmp.begin(), pairsWhichShouldBeRepeatedTmp.end());
@@ -933,15 +1035,13 @@ struct ExtensionPipelineProducerConsumer{
             mr
         );
 
-        GpuReadExtender::TaskData finishedTasks(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
-
         GpuReadExtender::RawExtendResult rawExtendResult{};
 
         CUDACHECK(cudaDeviceSynchronize());
 
         std::vector<read_number> pairsWhichShouldBeRepeated;
 
-        auto output = [&](){
+        auto output = [&](auto& finishedTasks){
 
             nvtx::push_range("output", 5);
 
@@ -995,6 +1095,7 @@ struct ExtensionPipelineProducerConsumer{
             assert(taskBatchPtr->extenderId == extenderId);
 
             auto& tasks = *taskBatchPtr->taskData;
+            auto& finishedTasks = *taskBatchPtr->finishedTaskData;
             auto& anchorData = *taskBatchPtr->anchorData;
             auto& anchorHashResult = *taskBatchPtr->anchorHashResult;
 
@@ -1022,12 +1123,13 @@ struct ExtensionPipelineProducerConsumer{
             //std::cerr << "num finished tasks after extend " << finishedTasks.size() << "\n";
 
             totalNumFinishedTasks += (finishedAfter - finishedBefore);
+            assert(numTasksToProcess >= totalNumFinishedTasks);
             //std::cerr << "update totalNumFinishedTasks to " << totalNumFinishedTasks << " / " << numTasksToProcess << "\n";
 
 
             const std::size_t limit = (programOptions.batchsize * 4);
             if(finishedTasks.size() > limit){
-                output();
+                output(finishedTasks);
                 //std::cerr << "num finished tasks after output " << finishedTasks.size() << "\n";
             }
 
@@ -1044,17 +1146,6 @@ struct ExtensionPipelineProducerConsumer{
 
             taskBatchPtr = hashedTaskBatchQueue.pop();
         }
-
-        //std::cerr << "num finished tasks after extend loop " << finishedTasks.size() << "\n";
-        output();
-        //std::cerr << "num finished tasks after output " << finishedTasks.size() << "\n";
-
-        // for(int i = 0; i < finishedTasks.size(); i++){
-        //     std::cerr << "(" << finishedTasks.pairId.element(i,cudaStreamPerThread) << "," << finishedTasks.id.element(i,cudaStreamPerThread) << "), ";
-        // }
-        assert(finishedTasks.size() == 0);
-
-        
         return pairsWhichShouldBeRepeated;
     };
 
