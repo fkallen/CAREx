@@ -3602,24 +3602,39 @@ struct GpuReadExtender{
                     const int numCands = numCandsPerTask[a];
                     const int candsOffset = numCandsPerTaskPS[a];
 
-                    for(int n = 0; n < numCands; n++){
+                    // for(int n = 0; n < numCands; n++){
+                    //     const int candidateIndex = (candsOffset+n);
+                    //     const int shift = shifts[candidateIndex];
+                    //     const int candidateLength = candidateLengths[candidateIndex];
+                    //     for(int i = threadIdx.x; i < candidateLength; i += blockDim.x){
+                    //         myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
+                    //     }
+                    //     __syncthreads();
+                    // }
+
+                    int previousBegin = d_resultLengths[a];
+
+                    for(int n = numCands - 1; n >= 0; n--){
                         const int candidateIndex = (candsOffset+n);
                         const int shift = shifts[candidateIndex];
                         const int candidateLength = candidateLengths[candidateIndex];
-                        for(int i = threadIdx.x; i < candidateLength; i += blockDim.x){
+                        const int end = std::min(shift + candidateLength, previousBegin);
+                        const int numToCopy = end - shift;
+                        for(int i = threadIdx.x; i < numToCopy; i += blockDim.x){
                             myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
                         }
                         __syncthreads();
+                        previousBegin = shift;
                     }
 
-                    if(numCands == 0){
-                        d_resultLengths[a] = anchorLengths[a];
-                    }else{
-                        const int candidateIndex = candsOffset + (numCands-1);
-                        const int shift = shifts[candidateIndex];
-                        const int candidateLength = candidateLengths[candidateIndex];
-                        d_resultLengths[a] = shift + candidateLength;
-                    }
+                    // if(numCands == 0){
+                    //     d_resultLengths[a] = anchorLengths[a];
+                    // }else{
+                    //     const int candidateIndex = candsOffset + (numCands-1);
+                    //     const int shift = shifts[candidateIndex];
+                    //     const int candidateLength = candidateLengths[candidateIndex];
+                    //     d_resultLengths[a] = shift + candidateLength;
+                    // }
                     // if(d_resultLengths[a] > resultpitch){
                     //     printf("error length is %d, pitch is %d\n", d_resultLengths[a], resultpitch);
                     // }
