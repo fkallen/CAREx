@@ -312,6 +312,8 @@ struct GpuReadExtender{
         rmm::device_uvector<extension::ExtensionDirection> direction;
         rmm::device_uvector<unsigned int> inputEncodedMate;
         rmm::device_uvector<unsigned int> inputAnchorsEncoded;
+        rmm::device_uvector<char> inputAnchorQualities;
+        rmm::device_uvector<char> inputMateQualities;
         rmm::device_uvector<int> soainputmateLengths;
         rmm::device_uvector<int> soainputAnchorLengths;
 
@@ -435,6 +437,8 @@ struct GpuReadExtender{
                 direction{0, stream, mr},
                 inputEncodedMate{0, stream, mr},
                 inputAnchorsEncoded{0, stream, mr},
+                inputAnchorQualities{0, stream, mr},
+                inputMateQualities{0, stream, mr},
                 soainputmateLengths{0, stream, mr},
                 soainputAnchorLengths{0, stream, mr},
                 d_usedReadIds{0, stream, mr},
@@ -478,6 +482,8 @@ struct GpuReadExtender{
             clear(direction, stream);
             clear(inputEncodedMate, stream);
             clear(inputAnchorsEncoded, stream);
+            clear(inputAnchorQualities, stream);
+            clear(inputMateQualities, stream);
             clear(soainputmateLengths, stream);
             clear(soainputAnchorLengths, stream);
 
@@ -517,6 +523,8 @@ struct GpuReadExtender{
             reserve(direction, newsize, stream);
             reserve(inputEncodedMate, newsize * encodedSequencePitchInInts, stream);
             reserve(inputAnchorsEncoded, newsize * encodedSequencePitchInInts, stream);
+            reserve(inputAnchorQualities, newsize * qualityPitchInBytes, stream);
+            reserve(inputMateQualities, newsize * qualityPitchInBytes, stream);
             reserve(soainputmateLengths, newsize, stream);
             reserve(soainputAnchorLengths, newsize, stream);
 
@@ -551,6 +559,8 @@ struct GpuReadExtender{
             direction.resize(newsize, stream);
             inputEncodedMate.resize(newsize * encodedSequencePitchInInts, stream);
             inputAnchorsEncoded.resize(newsize * encodedSequencePitchInInts, stream);
+            inputAnchorQualities.resize(newsize * qualityPitchInBytes, stream);
+            inputMateQualities.resize(newsize * qualityPitchInBytes, stream);
             soainputmateLengths.resize(newsize, stream);
             soainputAnchorLengths.resize(newsize, stream);
 
@@ -694,6 +704,20 @@ struct GpuReadExtender{
             ////std::cerr << "task " << this << " addTasks, stream " << stream << "\n";
             if(numReadPairs == 0) return;
 
+            // std::vector<char> h_readpair_qualities(2*numReadPairs * qualityPitchInBytes);
+            // CUDACHECK(cudaMemcpyAsync(h_readpair_qualities.data(), d_readpair_qualities, h_readpair_qualities.size(), D2H, stream));
+            // CUDACHECK(cudaStreamSynchronize(stream));
+
+            // std::cout << "input\n";
+            // for(int s = 0; s < 2*numReadPairs; s++){
+            //     const int inputlength = 150;
+            //     std::cout << "q" << s << "\n";
+            //     for(int i = 0; i < inputlength; i++){
+            //         std::cout << h_readpair_qualities[s * qualityPitchInBytes + i];
+            //     }
+            //     std::cout << "\n";
+            // }
+
             const int numAdditionalTasks = 4 * numReadPairs;
 
             TaskData newGpuSoaTaskData(mr, numAdditionalTasks, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
@@ -718,6 +742,8 @@ struct GpuReadExtender{
                 newGpuSoaTaskData.soainputmateLengths.data(),
                 newGpuSoaTaskData.inputAnchorsEncoded.data(),
                 newGpuSoaTaskData.soainputAnchorLengths.data(),
+                newGpuSoaTaskData.inputAnchorQualities.data(),
+                newGpuSoaTaskData.inputMateQualities.data(),
                 decodedSequencePitchInBytes,
                 qualityPitchInBytes,
                 encodedSequencePitchInInts,
@@ -727,7 +753,28 @@ struct GpuReadExtender{
                 extendedSequencePitchInBytes
             ); CUDACHECKASYNC;
 
+            // std::cout << "newGpuSoaTaskData\n";
+            // for(int s = 0; s < numAdditionalTasks; s++){
+            //     const int inputlength = newGpuSoaTaskData.soainputAnchorLengths.element(s, stream);
+            //     std::cout << "q" << s << "\n";
+            //     for(int i = 0; i < inputlength; i++){
+            //         std::cout << newGpuSoaTaskData.inputAnchorQualities.element(s * qualityPitchInBytes + i, stream);
+            //     }
+            //     std::cout << "\n";
+            // }
+
             append(newGpuSoaTaskData, stream);
+
+            
+            // std::cout << "appended\n";
+            // for(int s = 0; s < numAdditionalTasks; s++){
+            //     const int inputlength = soainputAnchorLengths.element(s, stream);
+            //     std::cout << "q" << s << "\n";
+            //     for(int i = 0; i < inputlength; i++){
+            //         std::cout << inputAnchorQualities.element(s * qualityPitchInBytes + i, stream);
+            //     }
+            //     std::cout << "\n";
+            // }
 
             // CUDACHECK(cudaStreamSynchronize(stream));
             // for(int t = 0; t < size(); t++){
@@ -1013,6 +1060,44 @@ struct GpuReadExtender{
                 destroy(newqualitiesOfExtendedSequences, stream); 
 
 
+                assert(qualityPitchInBytes % sizeof(int) == 0);
+
+                rmm::device_uvector<char> newinputAnchorQualities(qualityPitchInBytes * newsize, stream, mr);
+                rmm::device_uvector<char> newinputMateQualities(qualityPitchInBytes * newsize, stream, mr);
+
+                thrust::copy_n(
+                    rmm::exec_policy_nosync(stream,mr),
+                    thrust::make_zip_iterator(
+                        (int*)inputAnchorQualities.data(),
+                        (int*)inputMateQualities.data()
+                    ),
+                    size() * (qualityPitchInBytes / sizeof(int)),
+                    thrust::make_zip_iterator(
+                        (int*)newinputAnchorQualities.data(),
+                        (int*)newinputMateQualities.data()
+                    )
+                );
+
+                thrust::copy_n(
+                    rmm::exec_policy_nosync(stream,mr),
+                    thrust::make_zip_iterator(
+                        (int*)rhs.inputAnchorQualities.data(),
+                        (int*)rhs.inputMateQualities.data()
+                    ),
+                    rhs.size() * (qualityPitchInBytes / sizeof(int)),
+                    thrust::make_zip_iterator(
+                        ((int*)newinputAnchorQualities.data()) + size() * (qualityPitchInBytes / sizeof(int)),
+                        ((int*)newinputMateQualities.data()) + size() * (qualityPitchInBytes / sizeof(int))
+                    )
+                );
+
+                std::swap(inputAnchorQualities, newinputAnchorQualities);
+                std::swap(inputMateQualities, newinputMateQualities);
+
+                destroy(newinputAnchorQualities, stream);
+                destroy(newinputMateQualities, stream); 
+
+
 
                 ::append(d_usedReadIds, rhs.d_usedReadIds.data(), rhs.d_usedReadIds.data() + rhs.d_usedReadIds.size(), stream);
                 //::append(d_fullyUsedReadIds, rhs.d_fullyUsedReadIds.data(), rhs.d_fullyUsedReadIds.data() + rhs.d_fullyUsedReadIds.size(), stream);
@@ -1182,6 +1267,9 @@ struct GpuReadExtender{
             selection.inputEncodedMate.resize(gathersize * encodedSequencePitchInInts, stream);
             selection.inputAnchorsEncoded.resize(gathersize * encodedSequencePitchInInts, stream);
 
+            selection.inputAnchorQualities.resize(gathersize * qualityPitchInBytes, stream);
+            selection.inputMateQualities.resize(gathersize * qualityPitchInBytes, stream);
+
             thrust::gather(
                 rmm::exec_policy_nosync(stream, mr),
                 d_mapBegin,
@@ -1270,7 +1358,11 @@ struct GpuReadExtender{
                 selection.inputEncodedMate.data(),
                 inputEncodedMate.data(),
                 selection.inputAnchorsEncoded.data(),
-                inputAnchorsEncoded.data()
+                inputAnchorsEncoded.data(),
+                selection.inputAnchorQualities.data(),
+                inputAnchorQualities.data(),
+                selection.inputMateQualities.data(),
+                inputMateQualities.data()
             ); CUDACHECKASYNC;
 
 
@@ -2668,17 +2760,20 @@ struct GpuReadExtender{
             d_abortReasons.data(),
             tasks->pairedEnd.data(),
             tasks->inputEncodedMate.data(),
+            tasks->inputMateQualities.data(),
             encodedSequencePitchInInts,
+            qualityPitchInBytes,
             d_outputMateHasBeenFound.data(),
             iterationConfig->minCoverageForExtension,
             iterationConfig->maxextensionPerStep,
             tasks->extendedSequences.data(),
             tasks->extendedSequenceLengths.data(),
+            tasks->qualitiesOfExtendedSequences.data(),
             tasks->extendedSequencePitchInBytes
         ); CUDACHECKASYNC;
 
-        //TODO quality
-        CUDACHECK(cudaMemsetAsync(tasks->qualitiesOfExtendedSequences.data(), 'F', sizeof(char) * tasks->qualitiesOfExtendedSequences.size(), stream));
+
+        //CUDACHECK(cudaMemsetAsync(tasks->qualitiesOfExtendedSequences.data(), 'F', sizeof(char) * tasks->qualitiesOfExtendedSequences.size(), stream));
 
         // readextendergpukernels::computeExtensionStepQualityKernel<128><<<tasks->size(), 128, 0, stream>>>(
         //     d_goodscores.data(),
@@ -3174,6 +3269,16 @@ struct GpuReadExtender{
 
         CUDACHECK(cudaEventRecordWrapper(rawResults.event, stream));
 
+        // std::cout << "when finished\n";
+        // for(int s = 0; s < numFinishedTasks; s++){
+        //     const int inputlength = finishedTasks4.soainputAnchorLengths.element(s, stream);
+        //     std::cout << "q" << s << "\n";
+        //     for(int i = 0; i < inputlength; i++){
+        //         std::cout << finishedTasks4.inputAnchorQualities.element(s * qualityPitchInBytes + i, stream);
+        //     }
+        //     std::cout << "\n";
+        // }
+
         //replace positions which are covered by anchor and mate with the original data
         readextendergpukernels::applyOriginalReadsToExtendedReads<128,32>
         <<<SDIV(numFinishedTasks, 4), 128, 0, stream>>>(
@@ -3184,11 +3289,13 @@ struct GpuReadExtender{
             finishedTasks4.extendedSequenceLengths.data(),
             finishedTasks4.inputAnchorsEncoded.data(),
             finishedTasks4.soainputAnchorLengths.data(),
-            nullptr, //finishedTasks4.soainputAnchorQualities.data(),
+            finishedTasks4.inputAnchorQualities.data(),
             finishedTasks4.mateHasBeenFound.data(),
             encodedSequencePitchInInts,
             qualityPitchInBytes
         ); CUDACHECKASYNC;
+//                      rmm::device_uvector<char> inputAnchorQualities;
+//  rmm::device_uvector<char> inputMateQualities;
 
         // CUDACHECK(cudaStreamSynchronize(stream));
         // for(int t = 0; t < numFinishedTasks; t++){

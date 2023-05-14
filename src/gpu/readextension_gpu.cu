@@ -447,7 +447,12 @@ struct ExtensionPipeline{
                     stream,
                     mr
                 );
-                //if(batchId < 3){
+                //if(batchId < 1){
+                // if(numNewReads > 0 && currentIds[0] == 316){
+                //     for(int i = 0; i < numNewReads; i++){
+                //         std::cout << currentIds[i] << " ";
+                //     }
+                //     std::cout << "\n";
                 addNewReadsToTasks(
                     numNewReads,
                     currentIds.data(), 
@@ -1153,12 +1158,12 @@ void extend_gpu_pairedend(
             &progressThread
         );
     
-        //std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipeline.executeFirstPass();    
-        std::vector<read_number> pairsWhichShouldBeRepeated(616728);
-        {
-            std::ifstream s("pairsWhichShouldBeRepeated.bin");
-            s.read((char*)pairsWhichShouldBeRepeated.data(), 2466912);
-        }
+          std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipeline.executeFirstPass();    
+//        std::vector<read_number> pairsWhichShouldBeRepeated(616728);
+        // {
+        //     std::ifstream s("pairsWhichShouldBeRepeated.bin");
+        //     s.read((char*)pairsWhichShouldBeRepeated.data(), 2466912);
+        // }
         pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
     
         submitReadyResults(
