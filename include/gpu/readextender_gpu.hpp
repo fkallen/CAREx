@@ -278,12 +278,15 @@ struct GpuReadExtender{
         template<class T>
         using HostVector = std::vector<T>;
 
+
+
         int deviceId = 0;
         std::size_t entries = 0;
         std::size_t reservedEntries = 0;
         std::size_t encodedSequencePitchInInts = 0;
         std::size_t decodedSequencePitchInBytes = 0;
         std::size_t qualityPitchInBytes = 0;
+        std::size_t extendedSequencePitchInBytes = 2048;
         rmm::mr::device_memory_resource* mr;
         rmm::device_uvector<bool> pairedEnd;
         rmm::device_uvector<bool> mateHasBeenFound;
@@ -318,6 +321,10 @@ struct GpuReadExtender{
         // rmm::device_uvector<int> d_numFullyUsedReadIdsPerTask;
         // rmm::device_uvector<int> d_numFullyUsedReadIdsPerTaskPrefixSum;
 
+        rmm::device_uvector<char> extendedSequences;
+        rmm::device_uvector<char> qualitiesOfExtendedSequences;
+        rmm::device_uvector<int> extendedSequenceLengths;
+
 
 
         void consistencyCheck(cudaStream_t stream, bool verbose = false) const{
@@ -341,6 +348,12 @@ struct GpuReadExtender{
             assert(d_numUsedReadIdsPerTaskPrefixSum.size() == size() + 1);
             // assert(d_numFullyUsedReadIdsPerTask.size() == size());
             // assert(d_numFullyUsedReadIdsPerTaskPrefixSum.size() == size() + 1);
+
+            assert(extendedSequences.size() == extendedSequencePitchInBytes * size());
+            assert(qualitiesOfExtendedSequences.size() == extendedSequencePitchInBytes * size());
+            assert(extendedSequenceLengths.size() == size());
+
+
 
             if(verbose){
 
@@ -414,7 +427,7 @@ struct GpuReadExtender{
             std::size_t decodedSequencePitchInBytes_, 
             std::size_t qualityPitchInBytes_,
             cudaStream_t stream
-        ) 
+        ) //TODO extendedSequencesPitch
             : encodedSequencePitchInInts(encodedSequencePitchInInts_), 
                 decodedSequencePitchInBytes(decodedSequencePitchInBytes_), 
                 qualityPitchInBytes(qualityPitchInBytes_),
@@ -445,10 +458,13 @@ struct GpuReadExtender{
                 soaNumIterationResultsPerTaskPrefixSum{0, stream, mr},
                 d_usedReadIds{0, stream, mr},
                 d_numUsedReadIdsPerTask{0, stream, mr},
-                d_numUsedReadIdsPerTaskPrefixSum{0, stream, mr}
+                d_numUsedReadIdsPerTaskPrefixSum{0, stream, mr},
                 // d_fullyUsedReadIds{0, stream, mr},
                 // d_numFullyUsedReadIdsPerTask{0, stream, mr},
                 // d_numFullyUsedReadIdsPerTaskPrefixSum{0, stream, mr}
+                extendedSequences{0, stream, mr},
+                qualitiesOfExtendedSequences{0, stream, mr},
+                extendedSequenceLengths{0, stream, mr}
         {
             ////std::cerr << "task " << this << " constructor, stream " << stream << "\n";
             CUDACHECK(cudaGetDevice(&deviceId));
@@ -505,6 +521,12 @@ struct GpuReadExtender{
             // resizeUninitialized(d_numFullyUsedReadIdsPerTaskPrefixSum, 1, stream);
             // CUDACHECK(cudaMemsetAsync(d_numFullyUsedReadIdsPerTaskPrefixSum.data(), 0, sizeof(int), stream));
 
+            clear(extendedSequences, stream);
+            clear(qualitiesOfExtendedSequences, stream);
+            clear(extendedSequenceLengths, stream);
+
+
+
             entries = 0;
             //std::cerr << "after clear\n";
             consistencyCheck(stream);
@@ -538,6 +560,10 @@ struct GpuReadExtender{
 
             // reserve(d_numFullyUsedReadIdsPerTask, newsize, stream);
             // reserve(d_numFullyUsedReadIdsPerTaskPrefixSum, newsize + 1, stream);
+
+            reserve(extendedSequences, extendedSequencePitchInBytes * newsize, stream);
+            reserve(qualitiesOfExtendedSequences, extendedSequencePitchInBytes * newsize, stream);
+            reserve(extendedSequenceLengths, newsize, stream);
 
             reservedEntries = newsize;
 
@@ -574,6 +600,10 @@ struct GpuReadExtender{
             // d_numFullyUsedReadIdsPerTask.resize(newsize, stream);
             // d_numFullyUsedReadIdsPerTaskPrefixSum.resize(newsize + 1, stream);
 
+            extendedSequences.resize(extendedSequencePitchInBytes * newsize, stream);
+            qualitiesOfExtendedSequences.resize(extendedSequencePitchInBytes * newsize, stream);
+            extendedSequenceLengths.resize(newsize, stream);
+
             if(size() > 0){
                 if(newsize > size()){
 
@@ -587,6 +617,7 @@ struct GpuReadExtender{
                             soaNumIterationResultsPerTask = soaNumIterationResultsPerTask.data(),
                             d_numUsedReadIdsPerTask = d_numUsedReadIdsPerTask.data(),
                             //d_numFullyUsedReadIdsPerTask = d_numFullyUsedReadIdsPerTask.data(),
+                            extendedSequenceLengths = extendedSequenceLengths.data(),
                             size = size(),
                             newsize = newsize
                         ] __device__ (){
@@ -601,6 +632,7 @@ struct GpuReadExtender{
                                 soaNumIterationResultsPerTask[size + i] = 0;
                                 d_numUsedReadIdsPerTask[size + i] = 0;
                                 //d_numFullyUsedReadIdsPerTask[size + i] = 0;
+                                extendedSequenceLengths[size + i] = 0;
                             }
                         }
                     ); CUDACHECKASYNC;
@@ -608,26 +640,28 @@ struct GpuReadExtender{
             }else{
                 if(newsize > 0){
                     readextendergpukernels::fillKernel<<<SDIV(newsize, 128), 128, 0, stream>>>(
-                        thrust::make_zip_iterator(thrust::make_tuple(
+                        thrust::make_zip_iterator(
                             soaNumIterationResultsPerTask.data(),
-                            d_numUsedReadIdsPerTask.data()
+                            d_numUsedReadIdsPerTask.data(),
                             //d_numFullyUsedReadIdsPerTask.data()
-                        )),
+                            extendedSequenceLengths.data()
+                        ),
                         newsize,
                         thrust::make_tuple(
                             0,
+                            0,
+                            //0,
                             0
-                            //0
                         )
                     ); CUDACHECKASYNC;
                 }
 
                 readextendergpukernels::fillKernel<<<SDIV(newsize+1, 128), 128, 0, stream>>>(
-                    thrust::make_zip_iterator(thrust::make_tuple(
+                    thrust::make_zip_iterator(
                         soaNumIterationResultsPerTaskPrefixSum.data(),
                         d_numUsedReadIdsPerTaskPrefixSum.data()
                         //d_numFullyUsedReadIdsPerTaskPrefixSum.data()
-                    )),
+                    ),
                     newsize+1,
                     thrust::make_tuple(
                         0,
@@ -649,6 +683,7 @@ struct GpuReadExtender{
             if(encodedSequencePitchInInts != rhs.encodedSequencePitchInInts) return false;
             if(decodedSequencePitchInBytes != rhs.decodedSequencePitchInBytes) return false;
             if(qualityPitchInBytes != rhs.qualityPitchInBytes) return false;
+            if(extendedSequencePitchInBytes != rhs.extendedSequencePitchInBytes) return false;
             return true;
         }
 
@@ -724,7 +759,6 @@ struct GpuReadExtender{
             const int numAdditionalTasks = 4 * numReadPairs;
 
             TaskData newGpuSoaTaskData(mr, numAdditionalTasks, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
-
             readextendergpukernels::createGpuTaskData<128,8>
                 <<<SDIV(numAdditionalTasks, (128 / 8)), 128, 0, stream>>>(
                 numReadPairs,
@@ -754,10 +788,24 @@ struct GpuReadExtender{
                 newGpuSoaTaskData.soaNumIterationResultsPerTaskPrefixSum.data(),
                 decodedSequencePitchInBytes,
                 qualityPitchInBytes,
-                encodedSequencePitchInInts
+                encodedSequencePitchInInts,
+                newGpuSoaTaskData.extendedSequences.data(),
+                newGpuSoaTaskData.qualitiesOfExtendedSequences.data(),
+                newGpuSoaTaskData.extendedSequenceLengths.data(),
+                extendedSequencePitchInBytes
             ); CUDACHECKASYNC;
 
             append(newGpuSoaTaskData, stream);
+
+            // CUDACHECK(cudaStreamSynchronize(stream));
+            // for(int t = 0; t < size(); t++){
+            //     const int eL = extendedSequenceLengths.element(t, stream);
+            //     std::cout << "init extendedreads. " << eL << ":\n";
+            //     for(int i = 0; i < eL; i++){
+            //         std::cout << extendedSequences.element(extendedSequencePitchInBytes * t + i, stream);
+            //     }
+            //     std::cout << "\n";
+            // }
         }
 
         void append(const TaskData& rhs, cudaStream_t stream){
@@ -792,6 +840,7 @@ struct GpuReadExtender{
                 rmm::device_uvector<int> newnumUsedReadidsPerTask(newsize, stream, mr);
                 //rmm::device_uvector<int> newnumFullyUsedReadidsPerTask(newsize, stream, mr);
 
+                rmm::device_uvector<int> newextendedSequenceLengths(newsize, stream, mr);
 
                 thrust::copy_n(
                     rmm::exec_policy_nosync(stream,mr),
@@ -803,7 +852,8 @@ struct GpuReadExtender{
                         iteration.data(),
                         goodscore.data(),
                         myReadId.data(),
-                        mateReadId.data()
+                        mateReadId.data(),
+                        extendedSequenceLengths.data()
                     )),
                     size(),
                     thrust::make_zip_iterator(thrust::make_tuple(
@@ -814,7 +864,8 @@ struct GpuReadExtender{
                         newiteration.data(),
                         newgoodscore.data(),
                         newmyReadId.data(),
-                        newmateReadId.data()
+                        newmateReadId.data(),
+                        newextendedSequenceLengths.data()
                     ))
                 );
 
@@ -828,7 +879,8 @@ struct GpuReadExtender{
                         rhs.iteration.data(),
                         rhs.goodscore.data(),
                         rhs.myReadId.data(),
-                        rhs.mateReadId.data()
+                        rhs.mateReadId.data(),
+                        rhs.extendedSequenceLengths.data()
                     )),
                     rhs.size(),
                     thrust::make_zip_iterator(thrust::make_tuple(
@@ -839,7 +891,8 @@ struct GpuReadExtender{
                         newiteration.data() + size(),
                         newgoodscore.data() + size(),
                         newmyReadId.data() + size(),
-                        newmateReadId.data() + size()
+                        newmateReadId.data() + size(),
+                        newextendedSequenceLengths.data() + size()
                     ))
                 );
 
@@ -905,6 +958,8 @@ struct GpuReadExtender{
                 std::swap(d_numUsedReadIdsPerTask, newnumUsedReadidsPerTask);
                 //std::swap(d_numFullyUsedReadIdsPerTask, newnumFullyUsedReadidsPerTask);
 
+                std::swap(extendedSequenceLengths, newextendedSequenceLengths);
+
                 destroy(newpairedEnd, stream);
                 destroy(newmateHasBeenFound, stream);
                 destroy(newid, stream);
@@ -920,6 +975,7 @@ struct GpuReadExtender{
                 destroy(newsoaNumIterationResultsPerTask, stream);
                 destroy(newnumUsedReadidsPerTask, stream);
                 //destroy(newnumFullyUsedReadidsPerTask, stream);
+                destroy(newextendedSequenceLengths, stream);
 
                 rmm::device_uvector<int> newsoaNumIterationResultsPerTaskPrefixSum(newsize + 1, stream, mr);
                 rmm::device_uvector<int> newnumUsedReadidsPerTaskPrefixSum(newsize + 1, stream, mr);
@@ -1072,6 +1128,44 @@ struct GpuReadExtender{
 
                 destroy(newsoainputmateQualityScoresReversed, stream);
                 destroy(newsoainputAnchorQualities, stream); 
+
+
+
+                rmm::device_uvector<char> newextendedSequences(extendedSequencePitchInBytes * newsize, stream, mr);
+                rmm::device_uvector<char> newqualitiesOfExtendedSequences(extendedSequencePitchInBytes * newsize, stream, mr);
+
+                thrust::copy_n(
+                    rmm::exec_policy_nosync(stream,mr),
+                    thrust::make_zip_iterator(
+                        (int*)extendedSequences.data(),
+                        (int*)qualitiesOfExtendedSequences.data()
+                    ),
+                    size() * (extendedSequencePitchInBytes / sizeof(int)),
+                    thrust::make_zip_iterator(
+                        (int*)newextendedSequences.data(),
+                        (int*)newqualitiesOfExtendedSequences.data()
+                    )
+                );
+
+                thrust::copy_n(
+                    rmm::exec_policy_nosync(stream,mr),
+                    thrust::make_zip_iterator(
+                        (int*)rhs.extendedSequences.data(),
+                        (int*)rhs.qualitiesOfExtendedSequences.data()
+                    ),
+                    rhs.size() * (extendedSequencePitchInBytes / sizeof(int)),
+                    thrust::make_zip_iterator(
+                        ((int*)newextendedSequences.data()) + size() * (extendedSequencePitchInBytes / sizeof(int)),
+                        ((int*)newqualitiesOfExtendedSequences.data()) + size() * (extendedSequencePitchInBytes / sizeof(int))
+                    )
+                );
+
+                std::swap(extendedSequences, newextendedSequences);
+                std::swap(qualitiesOfExtendedSequences, newqualitiesOfExtendedSequences);
+
+                destroy(newextendedSequences, stream);
+                destroy(newqualitiesOfExtendedSequences, stream); 
+
 
                 #if 0
 
@@ -1249,7 +1343,8 @@ struct GpuReadExtender{
                 pairId.begin(),
                 iteration.begin(),
                 goodscore.begin(),
-                myReadId.begin()
+                myReadId.begin(),
+                extendedSequenceLengths.begin()
             ));
 
             auto outputScalars1Begin = thrust::make_zip_iterator(thrust::make_tuple(
@@ -1259,7 +1354,8 @@ struct GpuReadExtender{
                 selection.pairId.begin(),
                 selection.iteration.begin(),
                 selection.goodscore.begin(),
-                selection.myReadId.begin()
+                selection.myReadId.begin(),
+                selection.extendedSequenceLengths.begin()
             ));
 
             thrust::gather(
@@ -1389,6 +1485,11 @@ struct GpuReadExtender{
 
                 ::resizeUninitialized(selection.d_usedReadIds, *selectedNumUsedIds, stream);
                 //::resizeUninitialized(selection.d_fullyUsedReadIds, *selectedNumFullyUsedIds, stream);
+
+                ::resizeUninitialized(selection.extendedSequences, gathersize * extendedSequencePitchInBytes, stream);
+                ::resizeUninitialized(selection.qualitiesOfExtendedSequences, gathersize * extendedSequencePitchInBytes, stream);
+
+
             }else{
                 ::resizeUninitialized(selection.soatotalDecodedAnchorsLengths, 0, stream);
                 ::resizeUninitialized(selection.soatotalAnchorBeginInExtendedRead, 0, stream);
@@ -1398,8 +1499,18 @@ struct GpuReadExtender{
                 ::resizeUninitialized(selection.d_usedReadIds, 0, stream);
                 //::resizeUninitialized(selection.d_fullyUsedReadIds, 0, stream);
 
+                ::resizeUninitialized(selection.extendedSequences, 0 * extendedSequencePitchInBytes, stream);
+                ::resizeUninitialized(selection.qualitiesOfExtendedSequences, 0 * extendedSequencePitchInBytes, stream);
+
                 return;
             }
+
+            // std::cout << "gathersize " << gathersize << ", size " << size() << "\n";
+            // std::cout << "extendedSequencePitchInBytes " << extendedSequencePitchInBytes << "\n";
+            // std::cout << "selection.extendedSequences.data() " << (void*)selection.extendedSequences.data() << "\n";
+            // std::cout << "selection.extendedSequences.size() " << selection.extendedSequences.size() << "\n";
+            // std::cout << "extendedSequences.data() " << (void*)extendedSequences.data() << "\n";
+            // std::cout << "extendedSequences.size() " << extendedSequences.size() << "\n";
 
             readextendergpukernels::taskGatherKernel1<128, 32><<<gathersize, 128, 0, stream>>>(
                 d_mapBegin,
@@ -1408,6 +1519,11 @@ struct GpuReadExtender{
                 decodedSequencePitchInBytes,
                 qualityPitchInBytes,
                 encodedSequencePitchInInts,
+                extendedSequencePitchInBytes,
+                selection.extendedSequences.data(),
+                extendedSequences.data(),
+                selection.qualitiesOfExtendedSequences.data(),
+                qualitiesOfExtendedSequences.data(),
                 selection.soainputAnchorLengths.data(),
                 soainputAnchorLengths.data(),
                 selection.soainputAnchorQualities.data(),
@@ -2949,7 +3065,33 @@ struct GpuReadExtender{
       
         //compute extensions
 
-        readextendergpukernels::computeExtensionStepFromMsaKernel<128><<<tasks->size(), 128, 0, stream>>>(
+        // readextendergpukernels::computeExtensionStepFromMsaKernel<128><<<tasks->size(), 128, 0, stream>>>(
+        //     programOptions->minFragmentSize,
+        //     programOptions->maxFragmentSize,
+        //     multiMSA.multiMSAView(),
+        //     d_numCandidatesPerAnchor.data(),
+        //     d_numCandidatesPerAnchorPrefixSum.data(),
+        //     d_anchorSequencesLength.data(),
+        //     d_accumExtensionsLengths.data(),
+        //     tasks->soainputmateLengths.data(),
+        //     d_abortReasons.data(),
+        //     d_accumExtensionsLengthsOUT.data(),
+        //     d_outputAnchors.data(),
+        //     outputAnchorPitchInBytes,
+        //     d_outputAnchorQualities.data(),
+        //     outputAnchorQualityPitchInBytes,
+        //     d_outputAnchorLengths.data(),
+        //     tasks->pairedEnd.data(),
+        //     tasks->inputEncodedMate.data(),
+        //     encodedSequencePitchInInts,
+        //     decodedMatesRevCPitchInBytes,
+        //     d_outputMateHasBeenFound.data(),
+        //     d_sizeOfGapToMate.data(),
+        //     iterationConfig->minCoverageForExtension,
+        //     iterationConfig->maxextensionPerStep
+        // ); CUDACHECKASYNC;
+
+        readextendergpukernels::computeExtensionStepFromMsaKernel_new<128><<<tasks->size(), 128, 0, stream>>>(
             programOptions->minFragmentSize,
             programOptions->maxFragmentSize,
             multiMSA.multiMSAView(),
@@ -2972,7 +3114,10 @@ struct GpuReadExtender{
             d_outputMateHasBeenFound.data(),
             d_sizeOfGapToMate.data(),
             iterationConfig->minCoverageForExtension,
-            iterationConfig->maxextensionPerStep
+            iterationConfig->maxextensionPerStep,
+            tasks->extendedSequences.data(),
+            tasks->extendedSequenceLengths.data(),
+            tasks->extendedSequencePitchInBytes
         ); CUDACHECKASYNC;
 
         readextendergpukernels::computeExtensionStepQualityKernel<128><<<tasks->size(), 128, 0, stream>>>(
@@ -3572,6 +3717,7 @@ struct GpuReadExtender{
         CUDACHECK(cudaMemsetAsync(d_consensusQuality.data(), 'I', d_consensusQuality.size(), stream));
 
         helpers::lambda_kernel<<<numFinishedTasks, 128, 0, stream>>>(
+        //helpers::lambda_kernel<<<1, 1, 0, stream>>>(
             [
                 result = d_decodedConsensus.data(),
                 d_resultLengths = d_resultLengths.data(),
@@ -3602,46 +3748,39 @@ struct GpuReadExtender{
                     const int numCands = numCandsPerTask[a];
                     const int candsOffset = numCandsPerTaskPS[a];
 
-                    // for(int n = 0; n < numCands; n++){
+                    for(int n = 0; n < numCands; n++){
+                        const int candidateIndex = (candsOffset+n);
+                        const int shift = shifts[candidateIndex];
+                        //printf("shift %d\n", shift);
+                        const int candidateLength = candidateLengths[candidateIndex];
+                        for(int i = threadIdx.x; i < candidateLength; i += blockDim.x){
+                           // printf("%c", candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i]);
+                            myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
+                        }
+                       // printf("\n");
+                        __syncthreads();
+                    }
+
+                    // int previousBegin = d_resultLengths[a];
+
+                    // for(int n = numCands - 1; n >= 0; n--){
                     //     const int candidateIndex = (candsOffset+n);
                     //     const int shift = shifts[candidateIndex];
                     //     const int candidateLength = candidateLengths[candidateIndex];
-                    //     for(int i = threadIdx.x; i < candidateLength; i += blockDim.x){
+                    //     const int end = std::min(shift + candidateLength, previousBegin);
+                    //     const int numToCopy = end - shift;
+                    //     for(int i = threadIdx.x; i < numToCopy; i += blockDim.x){
                     //         myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
                     //     }
                     //     __syncthreads();
+                    //     previousBegin = shift;
                     // }
 
-                    int previousBegin = d_resultLengths[a];
-
-                    for(int n = numCands - 1; n >= 0; n--){
-                        const int candidateIndex = (candsOffset+n);
-                        const int shift = shifts[candidateIndex];
-                        const int candidateLength = candidateLengths[candidateIndex];
-                        const int end = std::min(shift + candidateLength, previousBegin);
-                        const int numToCopy = end - shift;
-                        for(int i = threadIdx.x; i < numToCopy; i += blockDim.x){
-                            myResult[shift + i] = candidateDataChars[size_t(decodedSequencePitchInBytes) * candidateIndex + i];
-                        }
-                        __syncthreads();
-                        previousBegin = shift;
-                    }
-
-                    // if(numCands == 0){
-                    //     d_resultLengths[a] = anchorLengths[a];
-                    // }else{
-                    //     const int candidateIndex = candsOffset + (numCands-1);
-                    //     const int shift = shifts[candidateIndex];
-                    //     const int candidateLength = candidateLengths[candidateIndex];
-                    //     d_resultLengths[a] = shift + candidateLength;
-                    // }
-                    // if(d_resultLengths[a] > resultpitch){
-                    //     printf("error length is %d, pitch is %d\n", d_resultLengths[a], resultpitch);
-                    // }
-                    // assert(d_resultLengths[a] <= resultpitch);
                 }
             }
         ); CUDACHECKASYNC;
+
+
 
         // std::vector<int> h_resultLengths(d_resultLengths.size());
         // CUDACHECK(cudaMemcpyAsync(h_resultLengths.data(), d_resultLengths.data(), sizeof(int) * d_resultLengths.size(), D2H, stream));
@@ -3691,6 +3830,49 @@ struct GpuReadExtender{
             encodedSequencePitchInInts,
             qualityPitchInBytes
         ); CUDACHECKASYNC;
+
+        // CUDACHECK(cudaStreamSynchronize(stream));
+        // for(int t = 0; t < numFinishedTasks; t++){
+        //     const int consL = d_resultLengths.element(t, stream);
+        //     std::cout << "decodedConsensus. " << consL << ":\n";
+        //     for(int i = 0; i < consL; i++){
+        //         std::cout << d_decodedConsensus.element(consensusPitch * t + i, stream);
+        //     }
+        //     std::cout << "\n";
+
+        //     const int eL = finishedTasks4.extendedSequenceLengths.element(t, stream);
+        //     std::cout << "new extendedreads. " << eL << ":\n";
+        //     for(int i = 0; i < eL; i++){
+        //         std::cout << finishedTasks4.extendedSequences.element(finishedTasks4.extendedSequencePitchInBytes * t + i, stream);
+        //     }
+        //     std::cout << "\n";
+        // }
+
+        helpers::lambda_kernel<<<numFinishedTasks, 128, 0, stream>>>(
+            [
+                consensusPitch = consensusPitch,
+                d_resultLengths = d_resultLengths.data(),
+                d_decodedConsensus = d_decodedConsensus.data(),
+                extendedSequencePitchInBytes = finishedTasks4.extendedSequencePitchInBytes,
+                extendedSequenceLengths = finishedTasks4.extendedSequenceLengths.data(),
+                extendedSequences = finishedTasks4.extendedSequences.data()
+            ] __device__ (){
+                const int s = blockIdx.x;
+                if(d_resultLengths[s] != extendedSequenceLengths[s]){
+                    printf("s %d lengths %d %d\n", s, d_resultLengths[s], extendedSequenceLengths[s]);
+                    assert(false);
+                }
+                for(int i = 150 + threadIdx.x; i < d_resultLengths[s]; i += blockDim.x){
+                    char l = d_decodedConsensus[consensusPitch * s + i];
+                    char r = extendedSequences[extendedSequencePitchInBytes * s + i];
+                    if(l != r){
+                        printf("s %d i %d, nucs %c %c\n", s, i, l, r);
+                        assert(false);
+                    }
+                }
+            }
+        );
+
 
         CUDACHECK(cudaEventSynchronizeWrapper(rawResults.event));
 

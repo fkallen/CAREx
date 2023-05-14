@@ -174,6 +174,11 @@ namespace readextendergpukernels{
         std::size_t decodedSequencePitchInBytes,
         std::size_t qualityPitchInBytes,
         std::size_t encodedSequencePitchInInts,
+        std::size_t extendedSequencePitchInBytes,
+        char* __restrict__ selection_extendedSequences,
+        const char* __restrict__ extendedSequences,
+        char* __restrict__ selection_qualitiesOfExtendedSequences,
+        const char* __restrict__ qualitiesOfExtendedSequences,
         int* __restrict__ selection_soainputAnchorLengths,
         const int* __restrict__ soainputAnchorLengths,
         char* __restrict__ selection_soainputAnchorQualities,
@@ -224,6 +229,15 @@ namespace readextendergpukernels{
 
                 selection_inputAnchorsEncoded[destindex * encodedSequencePitchInInts + k]
                     = inputAnchorsEncoded[srcindex * encodedSequencePitchInInts + k];
+            }
+
+            for(int k = threadIdx.x; k < extendedSequencePitchInBytes; k += blockDim.x){
+                selection_extendedSequences[destindex * extendedSequencePitchInBytes + k] 
+                    = extendedSequences[srcindex * extendedSequencePitchInBytes + k];
+            }
+            for(int k = threadIdx.x; k < extendedSequencePitchInBytes; k += blockDim.x){
+                selection_qualitiesOfExtendedSequences[destindex * extendedSequencePitchInBytes + k] 
+                    = qualitiesOfExtendedSequences[srcindex * extendedSequencePitchInBytes + k];
             }
         }
     }
@@ -1901,6 +1915,305 @@ namespace readextendergpukernels{
         }
     }
 
+
+
+
+    template<int blocksize>
+    __global__
+    void computeExtensionStepFromMsaKernel_new(
+        int minFragmentSize,
+        int maxFragmentSize,
+        const gpu::GPUMultiMSA multiMSA,
+        const int* d_numCandidatesPerAnchor,
+        const int* d_numCandidatesPerAnchorPrefixSum,
+        const int* d_anchorSequencesLength,
+        const int* d_accumExtensionsLengths,
+        const int* d_inputMateLengths,
+        extension::AbortReason* d_abortReasons,
+        int* d_accumExtensionsLengthsOUT,
+        char* d_outputAnchors,
+        int outputAnchorPitchInBytes,
+        char* d_outputAnchorQualities,
+        int outputAnchorQualityPitchInBytes,
+        int* d_outputAnchorLengths,
+        const bool* d_isPairedTask,
+        const unsigned int* d_inputanchormatedata,
+        int encodedSequencePitchInInts,
+        int decodedMatesRevCPitchInBytes,
+        bool* d_outputMateHasBeenFound,
+        int* d_sizeOfGapToMate,
+        int minCoverageForExtension,
+        int fixedStepsize,
+        char* extendedSequences,
+        int* extendedSequenceLengths,
+        int extendedSequencePitchInBytes
+    ){
+
+        using BlockReduce = cub::BlockReduce<int, blocksize>;
+        using BlockReduceFloat = cub::BlockReduce<float, blocksize>;
+
+        __shared__ union{
+            typename BlockReduce::TempStorage reduce;
+            typename BlockReduceFloat::TempStorage reduceFloat;
+        } temp;
+
+        constexpr int smemEncodedMateInts = 32;
+        __shared__ unsigned int smemEncodedMate[smemEncodedMateInts];
+
+        __shared__ int broadcastsmem_int;
+
+        for(int t = blockIdx.x; t < multiMSA.numMSAs; t += gridDim.x){
+            const int numCandidates = d_numCandidatesPerAnchor[t];
+
+            if(numCandidates > 0){
+                const gpu::GpuSingleMSA msa = multiMSA.getSingleMSA(t);
+
+                const int anchorLength = d_anchorSequencesLength[t];
+                int accumExtensionsLength = d_accumExtensionsLengths[t];
+                const int mateLength = d_inputMateLengths[t];
+                const bool isPaired = d_isPairedTask[t];
+
+                const int consensusLength = msa.computeSize();
+
+                auto consensusDecoded = msa.getDecodedConsensusIterator();
+                auto consensusQuality = msa.getConsensusQualityIterator();
+
+                extension::AbortReason* const abortReasonPtr = d_abortReasons + t;
+                char* const outputAnchor = d_outputAnchors + t * outputAnchorPitchInBytes;
+                char* const outputAnchorQuality = d_outputAnchorQualities + t * outputAnchorQualityPitchInBytes;
+                int* const outputAnchorLengthPtr = d_outputAnchorLengths + t;
+                bool* const mateHasBeenFoundPtr = d_outputMateHasBeenFound + t;
+
+                char* const outputExtendedSequence = extendedSequences + t * extendedSequencePitchInBytes;
+                const int currentExtensionLength = extendedSequenceLengths[t];
+
+
+
+                int extendBy = std::min(
+                    consensusLength - anchorLength, 
+                    std::max(0, fixedStepsize)
+                );
+                //cannot extend over fragment 
+                extendBy = std::min(extendBy, (maxFragmentSize - mateLength) - accumExtensionsLength);
+
+
+
+                //auto firstLowCoverageIter = std::find_if(coverage + anchorLength, coverage + consensusLength, [&](int cov){ return cov < minCoverageForExtension; });
+                //coverage is monotonically decreasing. convert coverages to 1 if >= minCoverageForExtension, else 0. Find position of first 0
+                int myPos = consensusLength;
+                for(int i = anchorLength + threadIdx.x; i < consensusLength; i += blockDim.x){
+                    int flag = msa.coverages[i] < minCoverageForExtension ? 0 : 1;
+                    if(flag == 0 && i < myPos){
+                        myPos = i;
+                    }
+                }
+
+                myPos = BlockReduce(temp.reduce).Reduce(myPos, cub::Min{});
+
+                if(threadIdx.x == 0){
+                    broadcastsmem_int = myPos;
+                }
+                __syncthreads();
+                myPos = broadcastsmem_int;
+                __syncthreads();
+
+                if(fixedStepsize <= 0){
+                    extendBy = myPos - anchorLength;
+                    extendBy = std::min(extendBy, (maxFragmentSize - mateLength) - accumExtensionsLength);
+                }
+
+                //if(threadIdx.x == 0) printf("t %d, extendBy %d, currentExtensionLength %d\n", t, extendBy, currentExtensionLength);
+
+                auto makeAnchorForNextIteration = [&](){
+                    if(extendBy == 0){
+                        if(threadIdx.x == 0){
+                            *abortReasonPtr = extension::AbortReason::MsaNotExtended;
+                            //printf("makeAnchorForNextIteration abort\n");
+                        }
+                    }else{
+                        if(threadIdx.x == 0){
+                            d_accumExtensionsLengthsOUT[t] = accumExtensionsLength + extendBy;
+                            *outputAnchorLengthPtr = anchorLength;
+                            //printf("d_accumExtensionsLengthsOUT[t] %d, *outputAnchorLengthPtr  %d \n", d_accumExtensionsLengthsOUT[t], *outputAnchorLengthPtr );
+                        }           
+
+                        for(int i = threadIdx.x; i < anchorLength; i += blockDim.x){
+                            outputAnchor[i] = consensusDecoded[extendBy + i];
+                            outputAnchorQuality[i] = consensusQuality[extendBy + i];
+                        }
+
+                        {
+                            // for(int i = threadIdx.x; i < extendBy; i += blockDim.x){
+                            //     outputExtendedSequence[currentExtensionLength + i] = consensusDecoded[anchorLength + i];
+                            // }
+                            for(int i = threadIdx.x; i < anchorLength; i += blockDim.x){
+                                outputExtendedSequence[currentExtensionLength - anchorLength + extendBy + i] = consensusDecoded[extendBy + i];
+                            }
+                            if(threadIdx.x == 0){
+                                extendedSequenceLengths[t] = currentExtensionLength + extendBy;
+                                //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+                            }
+                            
+                        }
+                    }
+                };
+
+                constexpr int requiredOverlapMate = 70; //TODO relative overlap 
+                constexpr float maxRelativeMismatchesInOverlap = 0.06f;
+                constexpr int maxAbsoluteMismatchesInOverlap = 10;
+
+                const int maxNumMismatches = std::min(int(mateLength * maxRelativeMismatchesInOverlap), maxAbsoluteMismatchesInOverlap);
+
+                
+
+                if(isPaired && accumExtensionsLength + consensusLength - requiredOverlapMate + mateLength >= minFragmentSize){
+                    //for each possibility to overlap the mate and consensus such that the merged sequence would end in the desired range [minFragmentSize, maxFragmentSize]
+
+                    const int firstStartpos = std::max(0, minFragmentSize - accumExtensionsLength - mateLength);
+                    const int lastStartposExcl = std::min(
+                        std::max(0, maxFragmentSize - accumExtensionsLength - mateLength) + 1,
+                        consensusLength - requiredOverlapMate
+                    );
+
+                    int bestOverlapMismatches = std::numeric_limits<int>::max();
+                    int bestOverlapStartpos = -1;
+
+                    const unsigned int* encodedMate = nullptr;
+                    {
+                        const unsigned int* const gmemEncodedMate = d_inputanchormatedata + t * encodedSequencePitchInInts;
+                        const int requirednumints = SequenceHelpers::getEncodedNumInts2Bit(mateLength);
+                        if(smemEncodedMateInts >= requirednumints){
+                            for(int i = threadIdx.x; i < requirednumints; i += blockDim.x){
+                                smemEncodedMate[i] = gmemEncodedMate[i];
+                            }
+                            encodedMate = &smemEncodedMate[0];
+                            __syncthreads();
+                        }else{
+                            encodedMate = &gmemEncodedMate[0];
+                        }
+                    }
+
+                    for(int startpos = firstStartpos; startpos < lastStartposExcl; startpos++){
+                        //compute metrics of overlap
+
+                        //Hamming distance. positions which do not overlap are not accounted for
+                        int ham = 0;
+                        for(int i = threadIdx.x; i < min(consensusLength - startpos, mateLength); i += blockDim.x){
+                            std::uint8_t encbasemate = SequenceHelpers::getEncodedNuc2Bit(encodedMate, mateLength, mateLength - 1 - i);
+                            std::uint8_t encbasematecomp = SequenceHelpers::complementBase2Bit(encbasemate);
+                            char decbasematecomp = SequenceHelpers::decodeBase(encbasematecomp);
+
+                            //TODO store consensusDecoded in smem ?
+                            ham += (consensusDecoded[startpos + i] != decbasematecomp) ? 1 : 0;
+                        }
+
+                        ham = BlockReduce(temp.reduce).Sum(ham);
+
+                        if(threadIdx.x == 0){
+                            broadcastsmem_int = ham;
+                        }
+                        __syncthreads();
+                        ham = broadcastsmem_int;
+                        __syncthreads();
+
+                        if(bestOverlapMismatches > ham){
+                            bestOverlapMismatches = ham;
+                            bestOverlapStartpos = startpos;
+                        }
+
+                        if(bestOverlapMismatches == 0){
+                            break;
+                        }
+                    }
+
+                    // if(threadIdx.x == 0){
+                    //     printf("gpu: bestOverlapMismatches %d,bestOverlapStartpos %d\n", bestOverlapMismatches, bestOverlapStartpos);
+                    // }
+
+                    if(bestOverlapMismatches <= maxNumMismatches){
+                        const int mateStartposInConsensus = bestOverlapStartpos;
+                        const int missingPositionsBetweenAnchorEndAndMateBegin = std::max(0, mateStartposInConsensus - anchorLength);
+                        if(threadIdx.x == 0){
+                            //printf("missingPositionsBetweenAnchorEndAndMateBegin %d\n", missingPositionsBetweenAnchorEndAndMateBegin);
+                        }
+
+                        if(missingPositionsBetweenAnchorEndAndMateBegin > 0){
+                            //bridge the gap between current anchor and mate
+
+                            for(int i = threadIdx.x; i < missingPositionsBetweenAnchorEndAndMateBegin; i += blockDim.x){
+                                outputAnchor[i] = consensusDecoded[anchorLength + i];
+                                outputAnchorQuality[i] = consensusQuality[anchorLength + i];
+                            }
+
+                            if(threadIdx.x == 0){
+                                d_accumExtensionsLengthsOUT[t] = accumExtensionsLength + anchorLength;
+                                *outputAnchorLengthPtr = missingPositionsBetweenAnchorEndAndMateBegin;
+                                *mateHasBeenFoundPtr = true;
+                                d_sizeOfGapToMate[t] = missingPositionsBetweenAnchorEndAndMateBegin;
+
+                                //printf("d_accumExtensionsLengthsOUT[t] %d, *outputAnchorLengthPtr %d\n", d_accumExtensionsLengthsOUT[t], *outputAnchorLengthPtr);
+                            }
+
+
+                            for(int i = threadIdx.x; i < missingPositionsBetweenAnchorEndAndMateBegin; i += blockDim.x){
+                                outputExtendedSequence[currentExtensionLength + i] = consensusDecoded[anchorLength + i];
+                            }
+                            for(int i = threadIdx.x; i < mateLength; i += blockDim.x){
+                                std::uint8_t encbasemate = SequenceHelpers::getEncodedNuc2Bit(encodedMate, mateLength, mateLength - 1 - i);
+                                std::uint8_t encbasematecomp = SequenceHelpers::complementBase2Bit(encbasemate);
+                                char decbasematecomp = SequenceHelpers::decodeBase(encbasematecomp);
+                                outputExtendedSequence[currentExtensionLength + missingPositionsBetweenAnchorEndAndMateBegin + i] = decbasematecomp;
+                            }
+                            if(threadIdx.x == 0){
+                                extendedSequenceLengths[t] = currentExtensionLength + missingPositionsBetweenAnchorEndAndMateBegin + mateLength;
+                                //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+                            }
+                        }else{
+
+                            if(threadIdx.x == 0){
+                                d_accumExtensionsLengthsOUT[t] = accumExtensionsLength + mateStartposInConsensus;
+                                *outputAnchorLengthPtr = 0;
+                                *mateHasBeenFoundPtr = true;
+                                d_sizeOfGapToMate[t] = 0;
+                                //printf("d_accumExtensionsLengthsOUT[t] %d, *outputAnchorLengthPtr %d, mateStartposInConsensus %d\n", d_accumExtensionsLengthsOUT[t], *outputAnchorLengthPtr, mateStartposInConsensus);
+                            
+                            }
+
+                            for(int i = threadIdx.x; i < mateLength; i += blockDim.x){
+                                std::uint8_t encbasemate = SequenceHelpers::getEncodedNuc2Bit(encodedMate, mateLength, mateLength - 1 - i);
+                                std::uint8_t encbasematecomp = SequenceHelpers::complementBase2Bit(encbasemate);
+                                char decbasematecomp = SequenceHelpers::decodeBase(encbasematecomp);
+                                outputExtendedSequence[currentExtensionLength - anchorLength + mateStartposInConsensus + i] = decbasematecomp;
+                            }
+                            if(threadIdx.x == 0){
+                                extendedSequenceLengths[t] = currentExtensionLength - anchorLength + mateStartposInConsensus + mateLength;
+                                //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+                            }
+                        }
+
+                        
+                    }else{
+                        makeAnchorForNextIteration();
+                    }
+                }else{
+                    makeAnchorForNextIteration();
+                }
+
+            }else{ //numCandidates == 0
+                if(threadIdx.x == 0){
+                    d_outputMateHasBeenFound[t] = false;
+                    d_abortReasons[t] = extension::AbortReason::NoPairedCandidatesAfterAlignment;
+                }
+            }
+        }
+    }
+
+
+
+
+
+
+
     template<int blocksize>
     __global__
     void computeExtensionStepQualityKernel(
@@ -2874,7 +3187,11 @@ namespace readextendergpukernels{
         int* __restrict__ d_accumExtensionsLengths,
         int decodedSequencePitchInBytes,
         int qualityPitchInBytes,
-        int encodedSequencePitchInInts
+        int encodedSequencePitchInInts,
+        char* __restrict__ extendedSequences,
+        char* __restrict__ qualitiesOfExtendedSequences,
+        int* __restrict__ extendedSequenceLengths,
+        int extendedSequencePitchInBytes
     ){
         constexpr int numGroupsInBlock = blocksize / groupsize;
 
@@ -2903,18 +3220,21 @@ namespace readextendergpukernels{
                 d_anchorSequencesLength[t] = d_readpair_readLengths[2 * pairId + 0];
                 d_inputMateLengths[t] = d_readpair_readLengths[2 * pairId + 1];
                 d_isPairedTask[t] = true;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * pairId + 0];
             }else if(id == 1){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * pairId + 1];
                 d_mateReadIds[t] = std::numeric_limits<read_number>::max();
                 d_anchorSequencesLength[t] = d_readpair_readLengths[2 * pairId + 1];
                 d_inputMateLengths[t] = 0;
                 d_isPairedTask[t] = false;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * pairId + 1];
             }else if(id == 2){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * pairId + 1];
                 d_mateReadIds[t] = d_readpair_readIds[2 * pairId + 0];
                 d_anchorSequencesLength[t] = d_readpair_readLengths[2 * pairId + 1];
                 d_inputMateLengths[t] = d_readpair_readLengths[2 * pairId + 0];
                 d_isPairedTask[t] = true;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * pairId + 1];
             }else{
                 //id == 3
                 d_anchorReadIds[t] = d_readpair_readIds[2 * pairId + 0];
@@ -2922,7 +3242,9 @@ namespace readextendergpukernels{
                 d_anchorSequencesLength[t] = d_readpair_readLengths[2 * pairId + 0];
                 d_inputMateLengths[t] = 0;
                 d_isPairedTask[t] = false;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * pairId + 0];
             }
+
         }
 
         #endif
@@ -2937,10 +3259,16 @@ namespace readextendergpukernels{
             unsigned int* const myAnchorSequence = d_anchorSequencesData + t * encodedSequencePitchInInts;
             unsigned int* const myMateSequence = d_inputanchormatedata + t * encodedSequencePitchInInts;
 
+            char* const extendedSequence = extendedSequences + t * extendedSequencePitchInBytes;
+
             if(id == 0){
                 for(int k = group.thread_rank(); k < encodedSequencePitchInInts; k += group.size()){
                     myAnchorSequence[k] = myReadpairSequences[k];
                     myMateSequence[k] = myReadpairSequences[encodedSequencePitchInInts + k];
+                }
+
+                for(int k = group.thread_rank(); k < d_readpair_readLengths[2 * pairId + 0]; k += group.size()){
+                    extendedSequence[k] = SequenceHelpers::getEncodedNuc2Bit(myReadpairSequences, d_readpair_readLengths[2 * pairId + 0], k);
                 }
             }else if(id == 1){
                 for(int k = group.thread_rank(); k < encodedSequencePitchInInts; k += group.size()){
@@ -2957,10 +3285,24 @@ namespace readextendergpukernels{
                     );
                 }
                 group.sync();
+                for(int k = group.thread_rank(); k < d_readpair_readLengths[2 * pairId + 1]; k += group.size()){
+                    std::uint8_t encbase = SequenceHelpers::getEncodedNuc2Bit(
+                        &myReadpairSequences[encodedSequencePitchInInts + k], 
+                        d_readpair_readLengths[2 * pairId + 1],
+                        d_readpair_readLengths[2 * pairId + 1] - 1 - k
+                    );
+                    std::uint8_t encbasecomp = SequenceHelpers::complementBase2Bit(encbase);
+                    char decbasecomp = SequenceHelpers::decodeBase(encbasecomp);
+
+                    extendedSequence[k] = decbasecomp;
+                }
             }else if(id == 2){
                 for(int k = group.thread_rank(); k < encodedSequencePitchInInts; k += group.size()){
                     myAnchorSequence[k] = myReadpairSequences[encodedSequencePitchInInts + k];
                     myMateSequence[k] = myReadpairSequences[k];
+                }
+                for(int k = group.thread_rank(); k < d_readpair_readLengths[2 * pairId + 1]; k += group.size()){
+                    extendedSequence[k] = SequenceHelpers::getEncodedNuc2Bit(&myReadpairSequences[encodedSequencePitchInInts + k], d_readpair_readLengths[2 * pairId + 1], k);
                 }
             }else{
                 //id == 3
@@ -2978,6 +3320,17 @@ namespace readextendergpukernels{
                     );
                 }
                 group.sync();
+                for(int k = group.thread_rank(); k < d_readpair_readLengths[2 * pairId + 1]; k += group.size()){
+                    std::uint8_t encbase = SequenceHelpers::getEncodedNuc2Bit(
+                        myReadpairSequences, 
+                        d_readpair_readLengths[2 * pairId + 0],
+                        d_readpair_readLengths[2 * pairId + 0] - 1 - k
+                    );
+                    std::uint8_t encbasecomp = SequenceHelpers::complementBase2Bit(encbase);
+                    char decbasecomp = SequenceHelpers::decodeBase(encbasecomp);
+
+                    extendedSequence[k] = decbasecomp;
+                }
             }
         }
         #endif
@@ -2992,6 +3345,8 @@ namespace readextendergpukernels{
             const int* const myReadPairLengths = d_readpair_readLengths + 2 * pairId;
             const char* const myReadpairQualities = d_readpair_qualities + 2 * pairId * qualityPitchInBytes;
             char* const myAnchorQualities = d_anchorQualityScores + t * qualityPitchInBytes;
+            char* const extendedSequenceQuality = extendedSequences + t * extendedSequencePitchInBytes;
+
 
             //const int numInts = qualityPitchInBytes / sizeof(int);
             int l0 = myReadPairLengths[0];
@@ -3001,18 +3356,30 @@ namespace readextendergpukernels{
                 for(int k = threadIdx.x; k < l0; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[k];
                 }
+                for(int k = threadIdx.x; k < l0; k += blockDim.x){
+                    extendedSequenceQuality[k] = myReadpairQualities[k];
+                }                
             }else if(id == 1){
                 for(int k = threadIdx.x; k < l1; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[qualityPitchInBytes + l1 - 1 - k];
+                }
+                for(int k = threadIdx.x; k < l1; k += blockDim.x){
+                    extendedSequenceQuality[k] = myReadpairQualities[qualityPitchInBytes + l1 - 1 - k];
                 }
             }else if(id == 2){
                 for(int k = threadIdx.x; k < l1; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[qualityPitchInBytes + k];
                 }
+                for(int k = threadIdx.x; k < l1; k += blockDim.x){
+                    extendedSequenceQuality[k] = myReadpairQualities[qualityPitchInBytes + k];
+                }
             }else{
                 //id == 3
                 for(int k = threadIdx.x; k < l0; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[l0 - 1 - k];
+                }
+                for(int k = threadIdx.x; k < l0; k += blockDim.x){
+                    extendedSequenceQuality[k] = myReadpairQualities[l0 - 1 - k];
                 }
             }
         }
@@ -3057,7 +3424,11 @@ namespace readextendergpukernels{
         int* __restrict__ soaNumIterationResultsPerTaskPrefixSum,
         int decodedSequencePitchInBytes,
         int qualityPitchInBytes,
-        int encodedSequencePitchInInts
+        int encodedSequencePitchInInts,
+        char* __restrict__ extendedSequences,
+        char* __restrict__ qualitiesOfExtendedSequences,
+        int* __restrict__ extendedSequenceLengths,
+        int extendedSequencePitchInBytes
     ){
         constexpr int numGroupsInBlock = blocksize / groupsize;
 
@@ -3096,6 +3467,7 @@ namespace readextendergpukernels{
                 inputmateLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
                 pairedEnd[t] = true;
                 direction[t] = extension::ExtensionDirection::LR;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
             }else if(id == 1){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 1];
                 d_mateReadIds[t] = std::numeric_limits<read_number>::max();
@@ -3103,6 +3475,7 @@ namespace readextendergpukernels{
                 inputmateLengths[t] = 0;
                 pairedEnd[t] = false;
                 direction[t] = extension::ExtensionDirection::LR;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
             }else if(id == 2){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 1];
                 d_mateReadIds[t] = d_readpair_readIds[2 * inputPairId + 0];
@@ -3110,6 +3483,7 @@ namespace readextendergpukernels{
                 inputmateLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
                 pairedEnd[t] = true;
                 direction[t] = extension::ExtensionDirection::RL;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
             }else{
                 //id == 3
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 0];
@@ -3118,6 +3492,7 @@ namespace readextendergpukernels{
                 inputmateLengths[t] = 0;
                 pairedEnd[t] = false;
                 direction[t] = extension::ExtensionDirection::RL;
+                extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
             }
         }
 
@@ -3134,6 +3509,8 @@ namespace readextendergpukernels{
             char* const myDecodedMateRevC = inputdecodedMateRevC + t * decodedSequencePitchInBytes;
             char* const myDecodedAnchor = inputAnchorsDecoded + t * decodedSequencePitchInBytes;
 
+            char* const extendedSequence = extendedSequences + t * extendedSequencePitchInBytes;
+
             if(id == 0){
                 for(int k = group.thread_rank(); k < encodedSequencePitchInInts; k += group.size()){
                     sharedEncodedSequence[groupIdInBlock][k] = myReadpairSequences[k]; //anchor in shared
@@ -3147,6 +3524,7 @@ namespace readextendergpukernels{
                 }
 
                 SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence[groupIdInBlock][0], myReadPairLengths[0], myDecodedAnchor);
+                SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence[groupIdInBlock][0], myReadPairLengths[0], extendedSequence);
                 group.sync();
 
                 if(group.thread_rank() == 0){
@@ -3182,6 +3560,7 @@ namespace readextendergpukernels{
                     myAnchorSequence[k] = sharedEncodedSequence2[groupIdInBlock][k];
                 }
                 SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence2[groupIdInBlock][0], myReadPairLengths[1], myDecodedAnchor);
+                SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence2[groupIdInBlock][0], myReadPairLengths[1], extendedSequence);
             }else if(id == 2){
                 // for(int k = group.thread_rank(); k < encodedSequencePitchInInts; k += group.size()){
                 //     myAnchorSequence[k] = myReadpairSequences[encodedSequencePitchInInts + k];
@@ -3200,6 +3579,7 @@ namespace readextendergpukernels{
                 }
 
                 SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence[groupIdInBlock][0], myReadPairLengths[0], myDecodedAnchor);
+                SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence[groupIdInBlock][0], myReadPairLengths[0], extendedSequence);
                 group.sync();
 
                 if(group.thread_rank() == 0){
@@ -3234,6 +3614,7 @@ namespace readextendergpukernels{
                     myAnchorSequence[k] = sharedEncodedSequence2[groupIdInBlock][k];
                 }
                 SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence2[groupIdInBlock][0], myReadPairLengths[0], myDecodedAnchor);
+                SequenceHelpers::decodeSequence2Bit(group, &sharedEncodedSequence2[groupIdInBlock][0], myReadPairLengths[0], extendedSequence);
             }
         }
 
@@ -3247,6 +3628,8 @@ namespace readextendergpukernels{
             char* const myAnchorQualities = inputAnchorQualities + t * qualityPitchInBytes;
             char* const myMateQualityScoresReversed = inputmateQualityScoresReversed + t * qualityPitchInBytes;
 
+            char* const extendedSequenceQuality = qualitiesOfExtendedSequences + t * extendedSequencePitchInBytes;
+
             //const int numInts = qualityPitchInBytes / sizeof(int);
             int l0 = myReadPairLengths[0];
             int l1 = myReadPairLengths[1];
@@ -3254,6 +3637,7 @@ namespace readextendergpukernels{
             if(id == 0){
                 for(int k = threadIdx.x; k < l0; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[k];
+                    extendedSequenceQuality[k] = myReadpairQualities[k];
                 }
                 for(int k = threadIdx.x; k < l1; k += blockDim.x){
                     myMateQualityScoresReversed[k] = myReadpairQualities[qualityPitchInBytes + l1 - 1 - k];
@@ -3261,10 +3645,12 @@ namespace readextendergpukernels{
             }else if(id == 1){
                 for(int k = threadIdx.x; k < l1; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[qualityPitchInBytes + l1 - 1 - k];
+                    extendedSequenceQuality[k] = myReadpairQualities[qualityPitchInBytes + l1 - 1 - k];
                 }
             }else if(id == 2){
                 for(int k = threadIdx.x; k < l1; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[qualityPitchInBytes + k];
+                    extendedSequenceQuality[k] = myReadpairQualities[qualityPitchInBytes + k];
                 }
                 for(int k = threadIdx.x; k < l0; k += blockDim.x){
                     myMateQualityScoresReversed[k] = myReadpairQualities[l0 - 1 - k];
@@ -3273,6 +3659,7 @@ namespace readextendergpukernels{
                 //id == 3
                 for(int k = threadIdx.x; k < l0; k += blockDim.x){
                     myAnchorQualities[k] = myReadpairQualities[l0 - 1 - k];
+                    extendedSequenceQuality[k] = myReadpairQualities[l0 - 1 - k];
                 }
             }
         }
