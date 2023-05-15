@@ -418,6 +418,9 @@ namespace gpu{
                 }
             }
 
+            //avoid race-condition on columnProperties
+            group.sync();
+
             //there can be at most one thread for which this is true
             if(newFirstColumn_incl != -1){
                 columnProperties->firstColumn_incl = newFirstColumn_incl;
