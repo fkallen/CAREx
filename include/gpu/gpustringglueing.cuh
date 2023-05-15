@@ -183,23 +183,24 @@ public:
         const int gapbegin = numToCopys1; 
         const int gapend = g.resultlength - numToCopys2;
 
+        assert(int(g.q1.size()) >= numToCopys1);
+        // if(group.thread_rank() == 0){
+        //     printf("numToCopys1 %d, numToCopys2 %d, g.resultlength %d, g.s1.size() %d, g.s2.size() %d\n", numToCopys1, numToCopys2, g.resultlength, g.s1.size(), g.s2.size());
+        // }
+
         for(int i = group.thread_rank(); i < numToCopys1; i += group.size()){
             resultSequence[i] = g.s1[i];
+            resultQualities[i] = g.q1[i];
+        }
+        if(gapend < gapbegin){
+            //output ranges of copy 1 and copy 2 overlap
+            group.sync();
         }
 
         for(int i = group.thread_rank(); i < numToCopys2; i += group.size()){
             resultSequence[gapend + i] = g.s2[g.s2.size() - numToCopys2 + i];
-        }
-
-        assert(int(g.q1.size()) >= numToCopys1);
-
-        for(int i = group.thread_rank(); i < numToCopys1; i += group.size()){
-            resultQualities[i] = g.q1[i];
-        }
-        for(int i = group.thread_rank(); i < numToCopys2; i += group.size()){
             resultQualities[gapend + i] = g.q2[g.q2.size() - numToCopys2 + i];
         }
-
 
         //fill the gap. for each position, use base of sequence with highest quality
         if(gapbegin < gapend){
