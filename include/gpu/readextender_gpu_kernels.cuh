@@ -2064,7 +2064,7 @@ namespace readextendergpukernels{
     }
 
 
-    //requires external shared memory of 2*outputPitch per group in block
+    //requires external shared memory of 3*outputPitch per group in block
     template<int blocksize>
     __global__
     void makePairResultsFromFinishedTasksKernel(
@@ -2099,6 +2099,11 @@ namespace readextendergpukernels{
         char* const smemQualities = smemSequence2 + outputPitch;
 
         __shared__ typename gpu::MismatchRatioGlueDecider<blocksize>::TempStorage smemDecider;
+
+        auto checkIndex = [&](int index){
+            // assert(0 <= index);
+            // assert(index < outputPitch);
+        };
 
         auto computeRead2Begin = [&](int i){
             if(dataMateHasBeenFound[i]){
@@ -2136,21 +2141,27 @@ namespace readextendergpukernels{
             auto overlapstart = computeRead2Begin(l);
 
             for(int i = group.thread_rank(); i < lengthL; i += group.size()){
+                checkIndex(i);
                 sequenceOutput[i] 
                     = dataExtendedReadSequences[l * inputPitch + i];
             }
 
             for(int i = group.thread_rank(); i < lengthR - originalLengthR; i += group.size()){
+                checkIndex(lengthL + i);
+                checkIndex(originalLengthR + i);
                 sequenceOutput[lengthL + i] 
                     = dataExtendedReadSequences[r * inputPitch + originalLengthR + i];
             }
 
             for(int i = group.thread_rank(); i < lengthL; i += group.size()){
+                checkIndex(i);
                 qualityOutput[i] 
                     = dataExtendedReadQualities[l * inputPitch + i];
             }
 
             for(int i = group.thread_rank(); i < lengthR - originalLengthR; i += group.size()){
+                checkIndex(lengthL + i);
+                checkIndex(originalLengthR + i);
                 qualityOutput[lengthL + i] 
                     = dataExtendedReadQualities[r * inputPitch + originalLengthR + i];
             }
@@ -2192,12 +2203,16 @@ namespace readextendergpukernels{
                     //insert extensions of reverse complement of d3 at beginning
 
                     for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
                         myResultSequence[k] = SequenceHelpers::complementBaseDecoded(
                             dataExtendedReadSequences[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k]
                         );
                     }
 
                     for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
                         myResultQualities[k] = 
                             dataExtendedReadQualities[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k];
                     }
@@ -2240,12 +2255,16 @@ namespace readextendergpukernels{
                 group.sync();
 
                 for(int k = group.thread_rank(); k < mergedLength; k += group.size()){
+                    checkIndex(k);
+                    checkIndex(mergedLength - 1 - k);
                     myResultSequence[k] = SequenceHelpers::complementBaseDecoded(
                         smemSequence[mergedLength - 1 - k]
                     );
                 }
 
                 for(int k = group.thread_rank(); k < mergedLength; k += group.size()){
+                    checkIndex(k);
+                    checkIndex(mergedLength - 1 - k);
                     myResultQualities[k] = smemQualities[mergedLength - 1 - k];
                 }
 
@@ -2269,11 +2288,15 @@ namespace readextendergpukernels{
                 if(extendedReadLength1 > originalLength1){
                     //insert extensions of d1 at end
                     for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(mergedLength + k);
+                        checkIndex(originalLength1 + k);
                         myResultSequence[mergedLength + k] = 
                             dataExtendedReadSequences[i1 * inputPitch + originalLength1 + k];                        
                     }
 
                     for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(mergedLength + k);
+                        checkIndex(originalLength1 + k);
                         myResultQualities[mergedLength + k] = 
                             dataExtendedReadQualities[i1 * inputPitch + originalLength1 + k];                        
                     }
@@ -2329,12 +2352,16 @@ namespace readextendergpukernels{
                 if(extendedReadLength3 > originalLength3){
 
                     for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
                         myResultSequence[k] = SequenceHelpers::complementBaseDecoded(
                             dataExtendedReadSequences[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k]
                         );
                     }
 
                     for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
                         myResultQualities[k] = 
                             dataExtendedReadQualities[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k];
                     }
@@ -2352,15 +2379,20 @@ namespace readextendergpukernels{
                     //copy sequences to smem
 
                     for(int k = group.thread_rank(); k < extendedReadLength0; k += group.size()){
+                        checkIndex(k);
                         smemSequence[k] = dataExtendedReadSequences[i0 * inputPitch + k];
                     }
 
                     for(int k = group.thread_rank(); k < extendedReadLength2; k += group.size()){
+                        checkIndex(k);
+                        checkIndex(extendedReadLength2 - 1 - k);
                         smemSequence2[k] = SequenceHelpers::complementBaseDecoded(
                             dataExtendedReadSequences[i2 * inputPitch + extendedReadLength2 - 1 - k]
                         );
                     }
                     for(int k = group.thread_rank(); k < extendedReadLength2; k += group.size()){
+                        checkIndex(k);
+                        checkIndex(extendedReadLength2 - 1 - k);
                         smemQualities[k] = dataExtendedReadQualities[i2 * inputPitch + extendedReadLength2 - 1 - k];
                     }
 
@@ -2383,6 +2415,26 @@ namespace readextendergpukernels{
                         );
 
                         if(decision.valid){
+                            // if(threadIdx.x == 0){
+                            //     printf("decision s1f %d, s2f %d, rl %d\n",
+                            //         decision.s1FirstResultIndex,decision.s2FirstResultIndex,decision.resultlength);
+                            //     for(int x = 0; x < decision.s1.size(); x++){
+                            //         printf("%c", decision.s1[x]);
+                            //     }
+                            //     printf("\n");
+                            //     for(int x = 0; x < decision.q1.size(); x++){
+                            //         printf("%c", decision.q1[x]);
+                            //     }
+                            //     printf("\n");
+                            //     for(int x = 0; x < decision.s2.size(); x++){
+                            //         printf("%c", decision.s2[x]);
+                            //     }
+                            //     printf("\n");
+                            //     for(int x = 0; x < decision.q2.size(); x++){
+                            //         printf("%c", decision.q2[x]);
+                            //     }
+                            //     printf("\n");
+                            // }
                             gluer(group, decision, myResultSequence + currentsize, myResultQualities + currentsize);
                             currentsize += resultLength;
                             
@@ -2397,10 +2449,14 @@ namespace readextendergpukernels{
                 }else{
                     //initialize result with d0
                     for(int k = group.thread_rank(); k < extendedReadLength0; k += group.size()){
+                        checkIndex(currentsize + k);
+                        checkIndex(k);
                         myResultSequence[currentsize + k] = dataExtendedReadSequences[i0 * inputPitch + k];
                     }
 
                     for(int k = group.thread_rank(); k < extendedReadLength0; k += group.size()){
+                        checkIndex(currentsize + k);
+                        checkIndex(k);
                         myResultQualities[currentsize + k] = dataExtendedReadQualities[i0 * inputPitch + k];
                     }
 
@@ -2412,10 +2468,14 @@ namespace readextendergpukernels{
                     //insert extensions of d1 at end
 
                     for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(currentsize + k);
+                        checkIndex(originalLength1 + k);
                         myResultSequence[currentsize + k] = dataExtendedReadSequences[i1 * inputPitch + originalLength1 + k];
                     }
 
                     for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(currentsize + k);
+                        checkIndex(originalLength1 + k);
                         myResultQualities[currentsize + k] = dataExtendedReadQualities[i1 * inputPitch + originalLength1 + k];
                     }
 
