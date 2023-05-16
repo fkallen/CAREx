@@ -120,7 +120,6 @@ namespace extension{
         int id = 0;
         int myLength = 0;
         int currentAnchorLength = 0;
-        int accumExtensionLengths = 0;
         int iteration = 0;
         int mateLength = 0;
         int numRemainingCandidates = 0;
@@ -172,7 +171,6 @@ namespace extension{
                 if(id != rhs.id) std::cerr << "id differs\n";
                 if(myLength != rhs.myLength) std::cerr << "myLength differs\n";
                 if(currentAnchorLength != rhs.currentAnchorLength) std::cerr << "currentAnchorLength differs\n";
-                if(accumExtensionLengths != rhs.accumExtensionLengths) std::cerr << "accumExtensionLengths differs\n";
                 if(iteration != rhs.iteration) std::cerr << "iteration differs\n";
                 if(mateLength != rhs.mateLength) std::cerr << "mateLength differs\n";
                 if(numRemainingCandidates != rhs.numRemainingCandidates) std::cerr << "numRemainingCandidates differs\n";
@@ -215,7 +213,6 @@ namespace extension{
             if(id != rhs.id) return false;
             if(myLength != rhs.myLength) return false;
             if(currentAnchorLength != rhs.currentAnchorLength) return false;
-            if(accumExtensionLengths != rhs.accumExtensionLengths) return false;
             if(iteration != rhs.iteration) return false;
             if(mateLength != rhs.mateLength) return false;
             if(numRemainingCandidates != rhs.numRemainingCandidates) return false;
@@ -261,7 +258,7 @@ namespace extension{
 
         bool isActive(int minFragmentSize, int maxFragmentSize) const noexcept{
             return (iteration < minFragmentSize 
-                && accumExtensionLengths < maxFragmentSize - (mateLength)
+                && extendedSequenceLength < maxFragmentSize
                 && !abort 
                 && !mateHasBeenFound);
         }
@@ -278,7 +275,6 @@ namespace extension{
             id = 0;
             myLength = 0;
             currentAnchorLength = 0;
-            accumExtensionLengths = 0;
             iteration = 0;
             mateLength = 0;
             direction = ExtensionDirection::LR;
