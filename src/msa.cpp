@@ -4,6 +4,8 @@
 
 #include <map>
 #include <bitset>
+#include <iomanip>
+#include <cstring>
 namespace care{
 
 void MultipleSequenceAlignment::build(const InputData& args){
@@ -136,15 +138,27 @@ void MultipleSequenceAlignment::findConsensus(){
     for(int column = 0; column < nColumns; ++column){
         char cons = 'A';
         float consWeight = weightsA[column];
-        if(weightsC[column] > consWeight){
+        // if(weightsC[column] > consWeight){
+        //     cons = 'C';
+        //     consWeight = weightsC[column];
+        // }
+        // if(weightsG[column] > consWeight){
+        //     cons = 'G';
+        //     consWeight = weightsG[column];
+        // }
+        // if(weightsT[column] > consWeight){
+        //     cons = 'T';
+        //     consWeight = weightsT[column];
+        // }
+        if(fgt(weightsC[column], consWeight)){
             cons = 'C';
             consWeight = weightsC[column];
         }
-        if(weightsG[column] > consWeight){
+        if(fgt(weightsG[column], consWeight)){
             cons = 'G';
             consWeight = weightsG[column];
         }
-        if(weightsT[column] > consWeight){
+        if(fgt(weightsT[column], consWeight)){
             cons = 'T';
             consWeight = weightsT[column];
         }
@@ -231,6 +245,74 @@ void MultipleSequenceAlignment::print(std::ostream& os) const{
 
         os << '\n';
     }
+    os << "Counts A\n";
+    for(int i = 0; i < nColumns; i++){
+        os << countsA[i] << " ";
+    }
+    os << "\n";
+    os << "Counts C\n";
+    for(int i = 0; i < nColumns; i++){
+        os << countsC[i] << " ";
+    }
+    os << "\n";
+    os << "Counts G\n";
+    for(int i = 0; i < nColumns; i++){
+        os << countsG[i] << " ";
+    }
+    os << "\n";
+    os << "Counts T\n";
+    for(int i = 0; i < nColumns; i++){
+        os << countsT[i] << " ";
+    }
+    os << "\n";
+    auto def = os.precision();
+//    os << std::setprecision(7);
+    // os << "Weights A\n";
+    // for(int i = 0; i < nColumns; i++){
+    //     os << weightsA[i] << " ";
+    // }
+    // os << "\n";
+    // os << "Weights C\n";
+    // for(int i = 0; i < nColumns; i++){
+    //     os << weightsC[i] << " ";
+    // }
+    // os << "\n";
+    // os << "Weights G\n";
+    // for(int i = 0; i < nColumns; i++){
+    //     os << weightsG[i] << " ";
+    // }
+    // os << "\n";
+    // os << "Weights T\n";
+    // for(int i = 0; i < nColumns; i++){
+    //     os << weightsT[i] << " ";
+    // }
+    // os << "\n";
+    //os << std::setprecision(def);
+    os << "Weights A\n";
+    for(int i = 0; i < nColumns; i++){
+        unsigned int u; memcpy(&u, &weightsA[i], sizeof(unsigned int));
+        os << u << " ";
+    }
+    os << "\n";
+    os << "Weights C\n";
+    for(int i = 0; i < nColumns; i++){
+        unsigned int u; memcpy(&u, &weightsC[i], sizeof(unsigned int));
+        os << u << " ";
+    }
+    os << "\n";
+    os << "Weights G\n";
+    for(int i = 0; i < nColumns; i++){
+        unsigned int u; memcpy(&u, &weightsG[i], sizeof(unsigned int));
+        os << u << " ";
+    }
+    os << "\n";
+    os << "Weights T\n";
+    for(int i = 0; i < nColumns; i++){
+        unsigned int u; memcpy(&u, &weightsT[i], sizeof(unsigned int));
+        os << u << " ";
+    }
+    os << "\n";
+    
 }
 
 

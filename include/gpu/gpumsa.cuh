@@ -86,24 +86,48 @@ namespace gpu{
             }
             printf("%d - %d, first %d, last %d, anchor %d\n", 
                 printbegin, printend, columnProperties->firstColumn_incl, columnProperties->lastColumn_excl, columnProperties->anchorColumnsBegin_incl);
+            // printf("Weights A:\n");
+            // for(int i = printbegin; i < printend; i++){
+            //     printf("%.7f ", weights[0 * columnPitchInElements + i]);
+            // }
+            // printf("\n");
+            // printf("Weights C:\n");
+            // for(int i = printbegin; i < printend; i++){
+            //     printf("%.7f ", weights[1 * columnPitchInElements + i]);
+            // }
+            // printf("\n");
+            // printf("Weights G:\n");
+            // for(int i = printbegin; i < printend; i++){
+            //     printf("%.7f ", weights[2 * columnPitchInElements + i]);
+            // }
+            // printf("\n");
+            // printf("Weights T:\n");
+            // for(int i = printbegin; i < printend; i++){
+            //     printf("%.7f ", weights[3 * columnPitchInElements + i]);
+            // }
+            // printf("\n");
             printf("Weights A:\n");
             for(int i = printbegin; i < printend; i++){
-                printf("%.7f ", weights[0 * columnPitchInElements + i]);
+                unsigned int u; memcpy(&u, &weights[0 * columnPitchInElements + i], sizeof(unsigned int));
+                printf("%u ", u);
             }
             printf("\n");
             printf("Weights C:\n");
             for(int i = printbegin; i < printend; i++){
-                printf("%.7f ", weights[1 * columnPitchInElements + i]);
+                unsigned int u; memcpy(&u, &weights[1 * columnPitchInElements + i], sizeof(unsigned int));
+                printf("%u ", u);
             }
             printf("\n");
             printf("Weights G:\n");
             for(int i = printbegin; i < printend; i++){
-                printf("%.7f ", weights[2 * columnPitchInElements + i]);
+                unsigned int u; memcpy(&u, &weights[2 * columnPitchInElements + i], sizeof(unsigned int));
+                printf("%u ", u);
             }
             printf("\n");
             printf("Weights T:\n");
             for(int i = printbegin; i < printend; i++){
-                printf("%.7f ", weights[3 * columnPitchInElements + i]);
+                unsigned int u; memcpy(&u, &weights[3 * columnPitchInElements + i], sizeof(unsigned int));
+                printf("%u ", u);
             }
             printf("\n");
         }
@@ -1034,19 +1058,35 @@ namespace gpu{
 
                         std::uint8_t cons = 5;
                         float consWeight = 0.0f;
-                        if(wa > consWeight){
+                        // if(wa > consWeight){
+                        //     cons = std::uint8_t{0};
+                        //     consWeight = wa;
+                        // }
+                        // if(wc > consWeight){
+                        //     cons = std::uint8_t{1};
+                        //     consWeight = wc;
+                        // }
+                        // if(wg > consWeight){
+                        //     cons = std::uint8_t{2};
+                        //     consWeight = wg;
+                        // }
+                        // if(wt > consWeight){
+                        //     cons = std::uint8_t{3};
+                        //     consWeight = wt;
+                        // }
+                        if(fgt(wa, consWeight)){
                             cons = std::uint8_t{0};
                             consWeight = wa;
                         }
-                        if(wc > consWeight){
+                        if(fgt(wc, consWeight)){
                             cons = std::uint8_t{1};
                             consWeight = wc;
                         }
-                        if(wg > consWeight){
+                        if(fgt(wg, consWeight)){
                             cons = std::uint8_t{2};
                             consWeight = wg;
                         }
-                        if(wt > consWeight){
+                        if(fgt(wt, consWeight)){
                             cons = std::uint8_t{3};
                             consWeight = wt;
                         }

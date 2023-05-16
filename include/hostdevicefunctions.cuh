@@ -16,6 +16,22 @@ namespace care{
 
     HOSTDEVICEQUALIFIER
     INLINEQUALIFIER
+    constexpr bool fgt(float l, float r){
+        constexpr float threshold = 1e-5f;
+        const float diff = l-r;
+        return diff > threshold && !feq(l,r);
+    }
+
+    HOSTDEVICEQUALIFIER
+    INLINEQUALIFIER
+    constexpr bool flt(float l, float r){
+        constexpr float threshold = 1e-5f;
+        const float diff = l-r;
+        return diff < threshold && !feq(l,r);
+    }
+
+    HOSTDEVICEQUALIFIER
+    INLINEQUALIFIER
     constexpr bool fleq(float l, float r){
         
         return (l < r) || feq(l,r);
@@ -51,6 +67,8 @@ namespace care{
     HOSTDEVICEQUALIFIER
     INLINEQUALIFIER
     char getQualityChar(float qualityweight){
+        //round to fixed digits to better compare cpu and gpu version
+        qualityweight = floorf(qualityweight * 100000) / 100000;
         constexpr int ascii_base = 33;
 
         auto base10logf = [](float f){
