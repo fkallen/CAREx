@@ -35,7 +35,7 @@
 
 
 
-#include <omp.h>
+//#include <omp.h>
 #include <cub/cub.cuh>
 #include <thrust/iterator/transform_iterator.h>
 
@@ -430,8 +430,12 @@ struct ExtensionPipeline{
             nvtx::pop_range();
         };
 
+        int batchId = -1;
         while(!(readIdGenerator->empty() && tasks.size() == 0)){
             if(int(tasks.size()) < (programOptions.batchsize * 4) / 2){
+            //if(tasks.size() == 0){
+                batchId++;
+                //std::cout << "batchid " << batchId << "\n";
                 const int maxNumNewPairs = (programOptions.batchsize * 4 - tasks.size()) / 4;
                 const int numNewReads = getNewReadsForExtender(
                     *readIdGenerator,
@@ -448,7 +452,12 @@ struct ExtensionPipeline{
                     stream,
                     mr
                 );
-
+                //if(batchId == 87680 / 2){
+                // if(numNewReads > 0 && currentIds[0] == 316){
+                //     for(int i = 0; i < numNewReads; i++){
+                //         std::cout << currentIds[i] << " ";
+                //     }
+                //     std::cout << "\n";
                 addNewReadsToTasks(
                     numNewReads,
                     currentIds.data(), 
@@ -462,6 +471,9 @@ struct ExtensionPipeline{
                     stream,
                     mr
                 );
+                // }else{
+                //     continue;
+                // }
             }
 
             tasks.aggregateAnchorData(anchorData, stream);
@@ -1249,7 +1261,12 @@ void extend_gpu_pairedend(
             &progressThread
         );
     
-        std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipeline.executeFirstPass();    
+          std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipeline.executeFirstPass();    
+//        std::vector<read_number> pairsWhichShouldBeRepeated(616728);
+        // {
+        //     std::ifstream s("pairsWhichShouldBeRepeated.bin");
+        //     s.read((char*)pairsWhichShouldBeRepeated.data(), 2466912);
+        // }
         pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
     
         submitReadyResults(

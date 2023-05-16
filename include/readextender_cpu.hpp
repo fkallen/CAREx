@@ -155,7 +155,7 @@ private:
 
             SequenceHelpers::encodeSequence2Bit(
                 task.currentAnchor.data(), 
-                task.totalDecodedAnchors.back().data(), 
+                task.extendedSequence.data() + task.extendedSequenceLength - task.currentAnchorLength,
                 task.currentAnchorLength
             );
         }
@@ -1071,6 +1071,51 @@ private:
             }
 
 
+            // if(task.pairId == 87680 / 2 && task.id == 1){
+            //     if(task.iteration == 7){
+                    // std::cout << "candidates before filter\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.candidateReadIds[i] << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "isPairedCandidate\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.isPairedCandidate[i] << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "orientations\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << int(task.alignmentFlags[i]) << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "overlaps\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.alignments[i].overlap << " ";
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "keepflags\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << keepflags[i] << " ";
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "anchor\n";
+                    // for(int i = 0; i < task.currentAnchorLength; i++){
+                    //     std::cout << SequenceHelpers::decodeBase(SequenceHelpers::getEncodedNuc2Bit(task.currentAnchor.data(), task.currentAnchorLength, i));
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "candidates\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.candidateReadIds[i] << " " << task.isPairedCandidate[i] << " " 
+                    //         << int(task.alignmentFlags[i]) << " " << task.alignments[i].overlap << " " 
+                    //         << task.alignments[i].shift << " " << keepflags[i] << "\n";
+                    // }
+            //     }
+            // }
+
+
             task.numRemainingCandidates = 0;
 
             //compact inplace
@@ -1138,6 +1183,16 @@ private:
                 task.abortReason = extension::AbortReason::NoPairedCandidatesAfterAlignment;
             }
 
+            // if(task.pairId == 87680 / 2 && task.id == 1){
+            //     if(task.iteration == 7){
+            //         std::cout << "candidates after filter\n";
+            //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+            //             std::cout << task.candidateReadIds[i] << " ";
+            //         }
+            //         std::cout << "\n";
+            //     }
+            // }
+
             // std::cerr << "candidates of task " << task.id << " after filter in iteration "<< task.iteration << ":\n";
             // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
             //     std::cerr << task.candidateReadIds[i] << " ";
@@ -1148,8 +1203,6 @@ private:
     }
 
     MultipleSequenceAlignment constructMSA(extension::Task& task, char* candidateQualities) const{
-        const std::string& decodedAnchor = task.totalDecodedAnchors.back();
-
         MultipleSequenceAlignment msa(qualityConversion);
 
         const bool useQualityScoresForMSA = true;
@@ -1188,9 +1241,9 @@ private:
             msaInput.nCandidates = task.numRemainingCandidates;
             msaInput.candidatesPitch = decodedSequencePitchInBytes;
             msaInput.candidateQualitiesPitch = qualityPitchInBytes;
-            msaInput.anchor = decodedAnchor.c_str();
+            msaInput.anchor = task.extendedSequence.data() + task.extendedSequenceLength - task.currentAnchorLength;
             msaInput.candidates = task.candidateStrings.data();
-            msaInput.anchorQualities = task.currentQualityScores.c_str();
+            msaInput.anchorQualities = task.qualityOfExtendedSequence.data() + task.extendedSequenceLength - task.currentAnchorLength;
             //msaInput.candidateQualities = candidateQualities.data();
             msaInput.candidateQualities = candidateQualities;
             msaInput.candidateLengths = task.candidateSequenceLengths.data();
@@ -1312,12 +1365,29 @@ private:
 
         #endif
 
+        // if(task.pairId == 87680 / 2 && task.id == 1){
+        //     if(task.iteration <= 7){
+        //         std::cout << "candidates after msa refinement\n";
+        //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+        //             std::cout << task.candidateReadIds[i] << " ";
+        //         }
+        //         std::cout << "\n";
+
+        //         std::cout << "consensus\n";
+        //         for(int i = 0; i < msa.nColumns; i++){
+        //             std::cout << msa.consensus[i];
+        //         }
+        //         std::cout << "\n";
+
+        //         msa.print(std::cout);
+        //         std::cout << "\n";
+        //     }
+        // }
+
         return msa;
     }
 
     MultipleSequenceAlignment constructMSA(extension::Task& task) const{
-        const std::string& decodedAnchor = task.totalDecodedAnchors.back();
-
         MultipleSequenceAlignment msa(qualityConversion);
 
         std::vector<char> candidateQualities(task.numRemainingCandidates * qualityPitchInBytes);
@@ -1378,9 +1448,9 @@ private:
             msaInput.nCandidates = task.numRemainingCandidates;
             msaInput.candidatesPitch = decodedSequencePitchInBytes;
             msaInput.candidateQualitiesPitch = qualityPitchInBytes;
-            msaInput.anchor = decodedAnchor.c_str();
+            msaInput.anchor = task.extendedSequence.data() + task.extendedSequenceLength - task.currentAnchorLength;
             msaInput.candidates = task.candidateStrings.data();
-            msaInput.anchorQualities = task.currentQualityScores.c_str();
+            msaInput.anchorQualities = task.qualityOfExtendedSequence.data() + task.extendedSequenceLength - task.currentAnchorLength;
             msaInput.candidateQualities = candidateQualities.data();
             msaInput.candidateLengths = task.candidateSequenceLengths.data();
             msaInput.candidateShifts = task.candidateShifts.data();
@@ -1501,10 +1571,20 @@ private:
 
         #endif
 
+        // if(task.pairId == 87680 / 2 && task.id == 1){
+        //     if(task.iteration == 7){
+        //         std::cout << "candidates after msa refinement\n";
+        //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+        //             std::cout << task.candidateReadIds[i] << " ";
+        //         }
+        //         std::cout << "\n";
+        //     }
+        // }
+
         return msa;
     }
 
-    ExtendWithMsaResult extendWithMsa(extension::Task& task, const MultipleSequenceAlignment& msa) const{
+    void extendWithMsa(extension::Task& task, const MultipleSequenceAlignment& msa) const{
         
         // if(task.myReadId == 0 && task.id == 3 && maxextensionPerStep == 6){
         //     std::cerr << "task id " << task.id << " myReadId " << task.myReadId << "\n";
@@ -1536,6 +1616,8 @@ private:
         const int consensusLength = msa.consensus.size();
         const int anchorLength = task.currentAnchorLength;
         const int mateLength = task.mateLength;
+        const int currentExtensionLength = task.extendedSequenceLength;
+        const int accumExtensionsLength = currentExtensionLength - anchorLength;
 
         //can extend by at most maxextensionPerStep bps
         int extendBy = std::min(
@@ -1543,7 +1625,7 @@ private:
             std::max(0, maxextensionPerStep)
         );
         //cannot extend over fragment 
-        extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - task.accumExtensionLengths);
+        extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - accumExtensionsLength);
 
         if(maxextensionPerStep <= 0){
 
@@ -1556,27 +1638,34 @@ private:
             );
 
             extendBy = std::distance(msa.coverage.begin() + anchorLength, iter);
-            extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - task.accumExtensionLengths);
+            extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - accumExtensionsLength);
         }
 
-        auto makeAnchorForNextIteration = [&](){
-            ExtendWithMsaResult result;
-            
+        auto makeAnchorForNextIteration = [&](){            
             if(extendBy == 0){
-                result.abortReason = extension::AbortReason::MsaNotExtended;
+                task.abortReason = extension::AbortReason::MsaNotExtended;
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "makeAnchorForNextIteration abort\n";
+                // }
             }else{
-                result.newAccumExtensionLength = task.accumExtensionLengths + extendBy;
-                result.newLength = anchorLength;
-                result.newAnchor = std::string(msa.consensus.data() + extendBy, anchorLength);
-                result.newQuality.resize(anchorLength);
-                std::transform(msa.support.begin() + extendBy, msa.support.begin() + extendBy + anchorLength, result.newQuality.begin(),
+                std::copy(
+                    msa.consensus.begin() + extendBy, 
+                    msa.consensus.begin() + extendBy + anchorLength, 
+                    task.extendedSequence.begin() + currentExtensionLength - anchorLength + extendBy
+                );
+                std::transform(
+                    msa.support.begin() + extendBy, 
+                    msa.support.begin() + extendBy + anchorLength, 
+                    task.qualityOfExtendedSequence.begin() + currentExtensionLength - anchorLength + extendBy,
                     [](const float f){
                         return getQualityChar(f);
                     }
                 );
+                task.extendedSequenceLength = currentExtensionLength + extendBy;
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "makeAnchorForNextIteration extendBy " << extendBy << "\n";
+                // }
             }
-
-            return result;
         };
 
         constexpr int requiredOverlapMate = 70; //TODO relative overlap 
@@ -1586,13 +1675,13 @@ private:
         const int maxNumMismatches = std::min(int(mateLength * maxRelativeMismatchesInOverlap), maxAbsoluteMismatchesInOverlap);
 
 
-        if(task.pairedEnd && task.accumExtensionLengths + consensusLength - requiredOverlapMate + mateLength >= programOptions.minFragmentSize){
+        if(task.pairedEnd && accumExtensionsLength + consensusLength - requiredOverlapMate + mateLength >= programOptions.minFragmentSize){
             //check if mate can be overlapped with consensus 
             //for each possibility to overlap the mate and consensus such that the merged sequence would end in the desired range [minFragmentSize, maxFragmentSize]
 
-            const int firstStartpos = std::max(0, programOptions.minFragmentSize - task.accumExtensionLengths - mateLength);
+            const int firstStartpos = std::max(0, programOptions.minFragmentSize - accumExtensionsLength - mateLength);
             const int lastStartposExcl = std::min(
-                std::max(0, programOptions.maxFragmentSize - task.accumExtensionLengths - mateLength) + 1,
+                std::max(0, programOptions.maxFragmentSize - accumExtensionsLength - mateLength) + 1,
                 consensusLength - requiredOverlapMate
             );
 
@@ -1621,35 +1710,56 @@ private:
                 const int mateStartposInConsensus = bestOverlapStartpos;
                 const int missingPositionsBetweenAnchorEndAndMateBegin = std::max(0, mateStartposInConsensus - task.currentAnchorLength);
 
-
-                ExtendWithMsaResult result;
-
                 if(missingPositionsBetweenAnchorEndAndMateBegin > 0){
                     //bridge the gap between current anchor and mate
-
-                    result.newAnchor = std::string(msa.consensus.data() + anchorLength, missingPositionsBetweenAnchorEndAndMateBegin);
-                    result.newQuality.resize(missingPositionsBetweenAnchorEndAndMateBegin);
-                    std::transform(
+                    auto it1 = std::copy(
+                        msa.consensus.begin() + anchorLength, 
+                        msa.consensus.begin() + anchorLength + missingPositionsBetweenAnchorEndAndMateBegin, 
+                        task.extendedSequence.begin() + currentExtensionLength
+                    );
+                    auto it2 = std::transform(
                         msa.support.begin() + anchorLength, 
                         msa.support.begin() + anchorLength + missingPositionsBetweenAnchorEndAndMateBegin, 
-                        result.newQuality.begin(),
+                        task.qualityOfExtendedSequence.begin() + currentExtensionLength,
                         [](const float f){
                             return getQualityChar(f);
                         }
                     );
 
-                    result.newAccumExtensionLength = task.accumExtensionLengths + task.currentAnchorLength;
-                    result.newLength = missingPositionsBetweenAnchorEndAndMateBegin;
-                    result.mateHasBeenFound = true;
-                    result.sizeOfGapToMate = missingPositionsBetweenAnchorEndAndMateBegin;
+                    //copy mate
+                    std::copy(
+                        task.decodedMateRevC.begin(),
+                        task.decodedMateRevC.begin() + task.mateLength,
+                        it1
+                    );
+                    std::copy(
+                        task.mateQualityScoresReversed.begin(),
+                        task.mateQualityScoresReversed.begin() + task.mateLength,
+                        it2
+                    );
+                    task.extendedSequenceLength = currentExtensionLength + missingPositionsBetweenAnchorEndAndMateBegin + mateLength;
+                    task.mateHasBeenFound = true;
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     std::cout << "finished missingPositionsBetweenAnchorEndAndMateBegin " << missingPositionsBetweenAnchorEndAndMateBegin << "\n";
+                    // }
                 }else{
-                    result.newAccumExtensionLength = task.accumExtensionLengths + mateStartposInConsensus;
-                    result.newLength = 0;
-                    result.mateHasBeenFound = true;
-                    result.sizeOfGapToMate = 0;
-                }
+                    std::copy(
+                        task.decodedMateRevC.begin(),
+                        task.decodedMateRevC.begin() + task.mateLength,
+                        task.extendedSequence.begin() + currentExtensionLength - anchorLength + mateStartposInConsensus
+                    );
+                    std::copy(
+                        task.mateQualityScoresReversed.begin(),
+                        task.mateQualityScoresReversed.begin() + task.mateLength,
+                        task.qualityOfExtendedSequence.begin() + currentExtensionLength - anchorLength + mateStartposInConsensus
+                    );
 
-                return result;
+                    task.extendedSequenceLength = currentExtensionLength - anchorLength + mateStartposInConsensus + mateLength;
+                    task.mateHasBeenFound = true;
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     std::cout << "finished missingPositionsBetweenAnchorEndAndMateBegin " << missingPositionsBetweenAnchorEndAndMateBegin << "\n";
+                    // }
+                }
             }else{
                 return makeAnchorForNextIteration();
             }
@@ -1709,14 +1819,9 @@ private:
             std::fill(candidateQualities.begin(), candidateQualities.end(), 'I');
         }
 
-        // const int numTasks = indicesOfActiveTasks.size();
-        // for(int i = 0; i < numTasks; i++){
-        //     auto& task = tasks[indicesOfActiveTasks[i]];
-
-        // for(int i = 0; i < int(indicesOfActiveTasks.size()); i++){
-        //     auto& task = tasks[indicesOfActiveTasks[i]];
         for(const auto& indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
+
 
             if(task.numRemainingCandidates > 0){
                 // if(task.id == 1 && task.iteration == 14){
@@ -1724,71 +1829,48 @@ private:
                 // }
 
                 const auto msa = constructMSA(task, candidateQualities.data() + offsets[&indexOfActiveTask - indicesOfActiveTasks.data()] * qualityPitchInBytes);
-                const auto result = extendWithMsa(task, msa);
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "iteration " << task.iteration << "\n";
+                // }
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "numCandidates " << task.numRemainingCandidates << "\n";
+                // }
+                extendWithMsa(task, msa);
 
-                // //if(task.id == 1){
-                //     std::cerr << "id: " << task.id << ", iter: " << task.iteration << ", mateHasBeenFound: " << result.mateHasBeenFound << ", abort: " << to_string(result.abortReason)
-                //         << ", newaccum: " << result.newAccumExtensionLength << ", newanchor: " << result.newAnchor << "\n";
-                // //}
-
-                task.abortReason = result.abortReason;
                 if(task.abortReason == extension::AbortReason::None){
-                    const int oldAccumExtensionLength = task.accumExtensionLengths;
-                    task.mateHasBeenFound = result.mateHasBeenFound;
-
                     if(!task.mateHasBeenFound){
-                        task.currentAnchorLength = result.newLength;
-                        task.accumExtensionLengths = result.newAccumExtensionLength;
-                        task.totalDecodedAnchors.emplace_back(std::move(result.newAnchor));
-                        task.totalAnchorQualityScores.emplace_back(std::move(result.newQuality));
-                        task.totalAnchorBeginInExtendedRead.emplace_back(task.accumExtensionLengths);
+                        // const int newAccumExtensionLength = task.accumExtensionLengths;
+                        // const int extendBy = newAccumExtensionLength - oldAccumExtensionLength;
 
-                        task.currentQualityScores = task.totalAnchorQualityScores.back(); 
-                        
-                    }else{
-                        const int sizeofGap = result.sizeOfGapToMate;
-                        if(sizeofGap == 0){
-                            task.accumExtensionLengths = result.newAccumExtensionLength;
-                            task.totalAnchorBeginInExtendedRead.emplace_back(task.accumExtensionLengths);
-                            task.totalDecodedAnchors.emplace_back(task.decodedMateRevC);
-                            task.totalAnchorQualityScores.emplace_back(task.mateQualityScoresReversed);
-                        }else{
+                        // CheckAmbiguousColumns columnChecker(msa);
 
-                            task.accumExtensionLengths = result.newAccumExtensionLength;
-                            task.totalDecodedAnchors.emplace_back(std::move(result.newAnchor));
-                            task.totalAnchorQualityScores.emplace_back(std::move(result.newQuality));
-                            task.totalAnchorBeginInExtendedRead.emplace_back(task.accumExtensionLengths);
-
-                            task.accumExtensionLengths += result.newLength;
-                            task.totalAnchorBeginInExtendedRead.emplace_back(task.accumExtensionLengths);
-                            task.totalDecodedAnchors.emplace_back(task.decodedMateRevC);
-                            task.totalAnchorQualityScores.emplace_back(task.mateQualityScoresReversed);
-                        }
+                        // auto splitInfos = columnChecker.getSplitInfos(task.currentAnchorLength, task.currentAnchorLength + extendBy, 0.4f, 0.6f);
+                        // int numSplits = columnChecker.getNumberOfSplits(
+                        //     splitInfos, msa
+                        // );
+                        // //printf("id %d, iteration %d, numSplits %d\n", task.id, task.iteration, numSplits);
+                        // task.goodscore += numSplits;
+                        task.goodscore += 0;
                     }
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     for(int i = 0; i < task.extendedSequenceLength; i++){
+                    //         std::cout << task.extendedSequence[i];
+                    //     }
+                    //     std::cout << "\n";
+                    // }
 
-                    if(!task.mateHasBeenFound){
-                        const int newAccumExtensionLength = task.accumExtensionLengths;
-                        const int extendBy = newAccumExtensionLength - oldAccumExtensionLength;
-
-                        CheckAmbiguousColumns columnChecker(msa);
-
-                        auto splitInfos = columnChecker.getSplitInfos(task.currentAnchorLength, task.currentAnchorLength + extendBy, 0.4f, 0.6f);
-                        int numSplits = columnChecker.getNumberOfSplits(
-                            splitInfos, msa
-                        );
-                        //printf("id %d, iteration %d, numSplits %d\n", task.id, task.iteration, numSplits);
-                        task.goodscore += numSplits;
-                    }
                 }
-
-                task.abort = task.abortReason != extension::AbortReason::None;
             }else{
+                task.mateHasBeenFound = false;
+                task.abortReason = extension::AbortReason::NoPairedCandidatesAfterAlignment;
                 //std::cerr << "did not extend task id " << task.id << " readid " << task.myReadId << " iteration " << task.iteration << " because no candidates.\n";
             }
+            task.abort = task.abortReason != extension::AbortReason::None;
         }
     }
 
     std::vector<extension::ExtendResult> constructResults(const std::vector<extension::Task>& tasks) const{
+        assert(tasks.size() % 4 == 0);
         std::vector<extension::ExtendResult> extendResults;
         extendResults.reserve(tasks.size());
 
@@ -1805,142 +1887,66 @@ private:
             extendResult.originalMateLength = task.mateLength;
             extendResult.read1begin = 0;
             extendResult.goodscore = task.goodscore;
+            extendResult.mateHasBeenFound = task.mateHasBeenFound;
 
-            //construct extended read
-            //build msa of all saved totalDecodedAnchors[0]
-
-            const int numsteps = task.totalDecodedAnchors.size();
-
-            int maxlen = 0;
-            for(const auto& s: task.totalDecodedAnchors){
-                const int len = s.length();
-                if(len > maxlen){
-                    maxlen = len;
-                }
-            }
-
-            const std::string& decodedAnchor = task.totalDecodedAnchors[0];
-            const std::string& anchorQuality = task.totalAnchorQualityScores[0];
-
-            const std::vector<int> shifts(task.totalAnchorBeginInExtendedRead.begin() + 1, task.totalAnchorBeginInExtendedRead.end());
-            std::vector<float> initialWeights(numsteps-1, 1.0f);
+            extendResult.extendedRead = std::string{task.extendedSequence.begin(), task.extendedSequence.begin() + task.extendedSequenceLength};
+            extendResult.qualityScores = std::string{task.qualityOfExtendedSequence.begin(), task.qualityOfExtendedSequence.begin() + task.extendedSequenceLength};
 
 
-            std::vector<char> stepstrings(maxlen * (numsteps-1), '\0');
-            std::vector<char> stepqualities(maxlen * (numsteps-1), '\0');
-            std::vector<int> stepstringlengths(numsteps-1);
-            for(int c = 1; c < numsteps; c++){
-                std::copy(
-                    task.totalDecodedAnchors[c].begin(),
-                    task.totalDecodedAnchors[c].end(),
-                    stepstrings.begin() + (c-1) * maxlen
-                );
-                assert(int(task.totalAnchorQualityScores[c].size()) <= maxlen);
-                std::copy(
-                    task.totalAnchorQualityScores[c].begin(),
-                    task.totalAnchorQualityScores[c].end(),
-                    stepqualities.begin() + (c-1) * maxlen
-                );
-                stepstringlengths[c-1] = task.totalDecodedAnchors[c].size();
-            }
-
-            MultipleSequenceAlignment::InputData msaInput;
-            msaInput.useQualityScores = false;
-            msaInput.anchorLength = decodedAnchor.length();
-            msaInput.nCandidates = numsteps-1;
-            msaInput.candidatesPitch = maxlen;
-            msaInput.candidateQualitiesPitch = maxlen;
-            msaInput.anchor = decodedAnchor.c_str();
-            msaInput.candidates = stepstrings.data();
-            msaInput.anchorQualities = anchorQuality.data();
-            msaInput.candidateQualities = stepqualities.data();
-            msaInput.candidateLengths = stepstringlengths.data();
-            msaInput.candidateShifts = shifts.data();
-            msaInput.candidateDefaultWeightFactors = initialWeights.data();
-
-            MultipleSequenceAlignment msa(qualityConversion);
-
-            msa.build(msaInput);
-
-            //msa.print(std::cerr);
-
-            std::string extendedRead(msa.consensus.begin(), msa.consensus.end());
-            std::string extendedReadQuality(msa.consensus.size(), '\0');
-            std::transform(msa.support.begin(), msa.support.end(), extendedReadQuality.begin(),
-                [](const float f){
-                    return getQualityChar(f);
-                }
-            );
-
-            std::copy(decodedAnchor.begin(), decodedAnchor.end(), extendedRead.begin());
-            std::copy(anchorQuality.begin(), anchorQuality.end(), extendedReadQuality.begin());
-
-
-            //alternative extendedRead. no msa + consensus, just concat
-
-            // std::string extendedReadTmp;
-
-            // if(numsteps > 1){
-            //     extendedReadTmp.resize(shifts.back() + stepstringlengths.back(), '\0');
-
-            //     auto b = std::copy(decodedAnchor.begin(), decodedAnchor.end(), extendedReadTmp.begin());
-            //     for(int i = 0; i < numsteps - 1; i++){
-            //         const int currentEnd = std::distance(extendedReadTmp.begin(), b);
-
-            //         const int nextLength = stepstringlengths[i];
-            //         const int nextBegin = shifts[i];
-
-            //         if(nextBegin + nextLength > currentEnd){
-            //             const int copybegin = currentEnd - nextBegin;
-            //             b = std::copy(
-            //                 task.totalDecodedAnchors[i+1].begin() + copybegin,
-            //                 task.totalDecodedAnchors[i+1].end(),
-            //                 b
-            //             );
-            //         }
-            //     }
-
-            //     assert(b == extendedReadTmp.end());
-
-            //     // if(extendedReadTmp != extendedRead){
-            //     //     std::cerr << "old: " << extendedRead << "\n";
-            //     //     std::cerr << "new: " << extendedReadTmp << "\n";
-            //     // }
-            // }else{
-            //     extendedReadTmp = decodedAnchor;
-            // }
-
-            
-            //std::swap(extendedReadTmp, extendedRead);
-
-
-
-
-            
-
+            //replace mate positions by original mate
             if(task.mateHasBeenFound){
                 //std::cerr << "copy " << task.decodedMateRevC << " to end of consensus " << task.myReadId << "\n";
                 std::copy(
                     task.decodedMateRevC.begin(),
                     task.decodedMateRevC.end(),
-                    extendedRead.begin() + extendedRead.length() - task.decodedMateRevC.length()
+                    extendResult.extendedRead.begin() + task.extendedSequenceLength - task.decodedMateRevC.length()
                 );
 
                 std::copy(
                     task.mateQualityScoresReversed.begin(),
                     task.mateQualityScoresReversed.end(),
-                    extendedReadQuality.begin() + extendedReadQuality.length() - task.decodedMateRevC.length()
+                    extendResult.qualityScores.begin() + task.extendedSequenceLength - task.decodedMateRevC.length()
                 );
 
-                extendResult.read2begin = extendedRead.length() - task.decodedMateRevC.length();
+                extendResult.read2begin = task.extendedSequenceLength - task.decodedMateRevC.length();
             }else{
                 extendResult.read2begin = -1;
             }
 
-            extendResult.extendedRead = std::move(extendedRead);
-            extendResult.qualityScores = std::move(extendedReadQuality);
+            //replace anchor positions by original anchor
+            std::copy(
+                task.inputAnchor.begin(),
+                task.inputAnchor.end(),
+                extendResult.extendedRead.begin()
+            );
+            std::copy(
+                task.inputAnchorQualityScores.begin(),
+                task.inputAnchorQualityScores.end(),
+                extendResult.qualityScores.begin()
+            );
 
-            extendResult.mateHasBeenFound = task.mateHasBeenFound;
+            //if(extendResult.readId1 == 316 || extendResult.readId2 == 316){
+            // if(task.pairId == 87680 / 2){
+            //     // if(foo == 0){
+            //     //     foo = 1;
+
+            //     //     for(int i = 0; i < 4; i++){
+            //     //         std::cout << tasks[i].myReadId << " " << tasks[i].mateReadId << "\n";
+            //     //     }
+            //     // }
+            //     std::cout << "taskid " << task.id << ", mateHasBeenFound " << extendResult.mateHasBeenFound << ", abort reason " << int(task.abortReason) 
+            //         << ", read1begin " << extendResult.read1begin << ", read2begin " << extendResult.read2begin << ", goodscore " << extendResult.goodscore 
+            //         << ", iteration " << task.iteration << "\n";
+            //     std::cout << extendResult.extendedRead << "\n";
+            //     std::cout << extendResult.qualityScores << "\n";
+            // }
+            
+
+            // std::cout << "quality\n";
+            // for(int i = 0; i < task.extendedSequenceLength; i++){
+            //     std::cout << extendResult.qualityScores[i];
+            // }
+            // std::cout << "\n";
 
             extendResults.emplace_back(std::move(extendResult));
         }
@@ -1950,6 +1956,12 @@ private:
             programOptions.minFragmentSize,
             programOptions.maxFragmentSize
         );
+
+        // std::cout << "combined quality\n";
+        // for(int i = 0; i < extendResultsCombined[0].qualityScores.size(); i++){
+        //     std::cout << extendResultsCombined[0].qualityScores[i];
+        // }
+        // std::cout << "\n";
 
         return extendResultsCombined;
     }

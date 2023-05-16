@@ -120,7 +120,6 @@ namespace extension{
         int id = 0;
         int myLength = 0;
         int currentAnchorLength = 0;
-        int accumExtensionLengths = 0;
         int iteration = 0;
         int mateLength = 0;
         int numRemainingCandidates = 0;
@@ -135,10 +134,9 @@ namespace extension{
         read_number currentAnchorReadId = 0;
         std::string decodedMate;
         std::string decodedMateRevC;
-        std::string resultsequence;
-        std::string resultQualityScores;
-        std::string currentQualityScores;
         std::string mateQualityScoresReversed;
+        std::string inputAnchor;
+        std::string inputAnchorQualityScores;
         std::vector<read_number> candidateReadIds;
         std::vector<read_number>::iterator mateIdLocationIter{};
         std::vector<unsigned int> currentAnchor;
@@ -149,18 +147,17 @@ namespace extension{
         std::vector<unsigned int> candidateSequenceData;
         std::vector<care::cpu::SHDResult> alignments;
         std::vector<AlignmentOrientation> alignmentFlags;
-        std::vector<std::string> totalDecodedAnchors;
-        std::vector<std::string> totalAnchorQualityScores;
-        std::vector<int> totalAnchorBeginInExtendedRead;
+
         std::vector<read_number> allUsedCandidateReadIdPairs; //sorted
         //std::vector<read_number> allFullyUsedCandidateReadIdPairs;
         std::vector<char> candidateStrings;
         std::vector<int> candidateShifts;
         std::vector<float> candidateOverlapWeights;
         std::vector<bool> isPairedCandidate;
-        std::vector<char> totalDecodedAnchorsFlat;
-        std::vector<int> totalDecodedAnchorsLengths;
-        std::vector<char> totalAnchorQualityScoresFlat;
+
+        std::vector<char> extendedSequence;
+        std::vector<char> qualityOfExtendedSequence;
+        int extendedSequenceLength;
 
 
 
@@ -174,7 +171,6 @@ namespace extension{
                 if(id != rhs.id) std::cerr << "id differs\n";
                 if(myLength != rhs.myLength) std::cerr << "myLength differs\n";
                 if(currentAnchorLength != rhs.currentAnchorLength) std::cerr << "currentAnchorLength differs\n";
-                if(accumExtensionLengths != rhs.accumExtensionLengths) std::cerr << "accumExtensionLengths differs\n";
                 if(iteration != rhs.iteration) std::cerr << "iteration differs\n";
                 if(mateLength != rhs.mateLength) std::cerr << "mateLength differs\n";
                 if(numRemainingCandidates != rhs.numRemainingCandidates) std::cerr << "numRemainingCandidates differs\n";
@@ -186,10 +182,9 @@ namespace extension{
                 if(currentAnchorReadId != rhs.currentAnchorReadId) std::cerr << "currentAnchorReadId differs\n";
                 if(decodedMate != rhs.decodedMate) std::cerr << "decodedMate differs\n";
                 if(decodedMateRevC != rhs.decodedMateRevC) std::cerr << "decodedMateRevC differs\n";
-                if(resultsequence != rhs.resultsequence) std::cerr << "resultsequence differs\n";
-                if(resultQualityScores != rhs.resultQualityScores) std::cerr << "resultQualityScores differs\n";
-                if(currentQualityScores != rhs.currentQualityScores) std::cerr << "currentQualityScores differs\n";
-                if(mateQualityScoresReversed != rhs.mateQualityScoresReversed) std::cerr << "mateQualityScoresReversed differs\n";                
+                if(mateQualityScoresReversed != rhs.mateQualityScoresReversed) std::cerr << "mateQualityScoresReversed differs\n";     
+                if(inputAnchor != rhs.inputAnchor) std::cerr << "inputAnchor differs\n";     
+                if(inputAnchorQualityScores != rhs.inputAnchorQualityScores) std::cerr << "inputAnchorQualityScores differs\n";           
                 if(candidateReadIds != rhs.candidateReadIds) std::cerr << "candidateReadIds differs\n";
                 if(mateIdLocationIter != rhs.mateIdLocationIter) std::cerr << "mateIdLocationIter differs\n";
                 if(currentAnchor != rhs.currentAnchor) std::cerr << "currentAnchor differs\n";
@@ -200,18 +195,15 @@ namespace extension{
                 if(candidateSequenceData != rhs.candidateSequenceData) std::cerr << "candidateSequenceData differs\n";
                 if(alignments != rhs.alignments) std::cerr << "alignments differs\n";
                 if(alignmentFlags != rhs.alignmentFlags) std::cerr << "alignmentFlags differs\n";
-                if(totalDecodedAnchors != rhs.totalDecodedAnchors) std::cerr << "totalDecodedAnchors differs\n";
-                if(totalAnchorQualityScores != rhs.totalAnchorQualityScores) std::cerr << "totalAnchorQualityScores differs\n";                
-                if(totalAnchorBeginInExtendedRead != rhs.totalAnchorBeginInExtendedRead) std::cerr << "totalAnchorBeginInExtendedRead differs\n";
                 if(allUsedCandidateReadIdPairs != rhs.allUsedCandidateReadIdPairs) std::cerr << "allUsedCandidateReadIdPairs differs\n";
                 //if(allFullyUsedCandidateReadIdPairs != rhs.allFullyUsedCandidateReadIdPairs) std::cerr << "allFullyUsedCandidateReadIdPairs differs\n";                
                 if(candidateStrings != rhs.candidateStrings) std::cerr << "candidateStrings differs\n";
                 if(candidateShifts != rhs.candidateShifts) std::cerr << "candidateShifts differs\n";
                 if(candidateOverlapWeights != rhs.candidateOverlapWeights) std::cerr << "candidateOverlapWeights differs\n";
                 if(isPairedCandidate != rhs.isPairedCandidate) std::cerr << "isPairedCandidate differs\n";
-                if(totalDecodedAnchorsFlat != rhs.totalDecodedAnchorsFlat) std::cerr << "totalDecodedAnchorsFlat differs\n";
-                if(totalDecodedAnchorsLengths != rhs.totalDecodedAnchorsLengths) std::cerr << "totalDecodedAnchorsLengths differs\n";
-                if(totalAnchorQualityScoresFlat != rhs.totalAnchorQualityScoresFlat) std::cerr << "totalAnchorQualityScoresFlat differs\n";
+                if(extendedSequence != rhs.extendedSequence) std::cerr << "extendedSequence differs\n";
+                if(qualityOfExtendedSequence != rhs.qualityOfExtendedSequence) std::cerr << "qualityOfExtendedSequence differs\n";
+                if(extendedSequenceLength != rhs.extendedSequenceLength) std::cerr << "extendedSequenceLength differs\n";
             #endif
             if(pairedEnd != rhs.pairedEnd) return false;
             if(abort != rhs.abort) return false;
@@ -221,7 +213,6 @@ namespace extension{
             if(id != rhs.id) return false;
             if(myLength != rhs.myLength) return false;
             if(currentAnchorLength != rhs.currentAnchorLength) return false;
-            if(accumExtensionLengths != rhs.accumExtensionLengths) return false;
             if(iteration != rhs.iteration) return false;
             if(mateLength != rhs.mateLength) return false;
             if(numRemainingCandidates != rhs.numRemainingCandidates) return false;
@@ -233,10 +224,9 @@ namespace extension{
             if(currentAnchorReadId != rhs.currentAnchorReadId) return false;
             if(decodedMate != rhs.decodedMate) return false;
             if(decodedMateRevC != rhs.decodedMateRevC) return false;
-            if(resultsequence != rhs.resultsequence) return false;
-            if(resultQualityScores != rhs.resultQualityScores) return false;
-            if(currentQualityScores != rhs.currentQualityScores) return false;
             if(mateQualityScoresReversed != rhs.mateQualityScoresReversed) return false;
+            if(inputAnchor != rhs.inputAnchor) return false;
+            if(inputAnchorQualityScores != rhs.inputAnchorQualityScores) return false;   
             if(candidateReadIds != rhs.candidateReadIds) return false;
             if(mateIdLocationIter != rhs.mateIdLocationIter) return false;
             if(currentAnchor != rhs.currentAnchor) return false;
@@ -247,18 +237,16 @@ namespace extension{
             if(candidateSequenceData != rhs.candidateSequenceData) return false;
             if(alignments != rhs.alignments) return false;
             if(alignmentFlags != rhs.alignmentFlags) return false;
-            if(totalDecodedAnchors != rhs.totalDecodedAnchors) return false;
-            if(totalAnchorQualityScores != rhs.totalAnchorQualityScores) return false;            
-            if(totalAnchorBeginInExtendedRead != rhs.totalAnchorBeginInExtendedRead) return false;
             if(allUsedCandidateReadIdPairs != rhs.allUsedCandidateReadIdPairs) return false;
             //if(allFullyUsedCandidateReadIdPairs != rhs.allFullyUsedCandidateReadIdPairs) return false;            
             if(candidateStrings != rhs.candidateStrings) return false;
             if(candidateShifts != rhs.candidateShifts) return false;
             if(candidateOverlapWeights != rhs.candidateOverlapWeights) return false;
             if(isPairedCandidate != rhs.isPairedCandidate) return false;
-            if(totalDecodedAnchorsFlat != rhs.totalDecodedAnchorsFlat) return false;
-            if(totalDecodedAnchorsLengths != rhs.totalDecodedAnchorsLengths) return false;
-            if(totalAnchorQualityScoresFlat != rhs.totalAnchorQualityScoresFlat) return false;
+
+            if(extendedSequence != rhs.extendedSequence) return false;
+            if(qualityOfExtendedSequence != rhs.qualityOfExtendedSequence) return false;
+            if(extendedSequenceLength != rhs.extendedSequenceLength) return false;
 
             return true;
         }
@@ -270,7 +258,7 @@ namespace extension{
 
         bool isActive(int minFragmentSize, int maxFragmentSize) const noexcept{
             return (iteration < minFragmentSize 
-                && accumExtensionLengths < maxFragmentSize - (mateLength)
+                && extendedSequenceLength < maxFragmentSize
                 && !abort 
                 && !mateHasBeenFound);
         }
@@ -287,7 +275,6 @@ namespace extension{
             id = 0;
             myLength = 0;
             currentAnchorLength = 0;
-            accumExtensionLengths = 0;
             iteration = 0;
             mateLength = 0;
             direction = ExtensionDirection::LR;
@@ -299,10 +286,9 @@ namespace extension{
 
             clear(decodedMate);
             clear(decodedMateRevC);
-            clear(resultsequence);
-            clear(resultQualityScores);
-            clear(currentQualityScores);
             clear(mateQualityScoresReversed);
+            clear(inputAnchor);
+            clear(inputAnchorQualityScores);
             clear(candidateReadIds);
             mateIdLocationIter = candidateReadIds.end();
             clear(currentAnchor);
@@ -313,18 +299,16 @@ namespace extension{
             clear(candidateSequenceData);
             clear(alignments);
             clear(alignmentFlags);
-            clear(totalDecodedAnchors);
-            clear(totalAnchorQualityScores);
-            clear(totalAnchorBeginInExtendedRead);
             clear(allUsedCandidateReadIdPairs);
             //clear(allFullyUsedCandidateReadIdPairs);
             clear(candidateStrings);
             clear(candidateShifts);
             clear(candidateOverlapWeights);
             clear(isPairedCandidate);
-            clear(totalDecodedAnchorsFlat);
-            clear(totalDecodedAnchorsLengths);
-            clear(totalAnchorQualityScoresFlat);
+
+            clear(extendedSequence);
+            clear(qualityOfExtendedSequence);
+            extendedSequenceLength = 0;
         }
     };
 
@@ -403,7 +387,7 @@ namespace extension{
                 std::string dec2_53 = SequenceHelpers::get2BitString(enc2_53.data(), input.readLength2);
                 std::string dec2_35 = SequenceHelpers::get2BitString(enc2_35.data(), input.readLength2);
 
-
+                constexpr std::size_t extendedSequencePitch = 2048;
                 //task1, extend encodedRead1 to the right on 5-3 strand
                 auto& task1 = *cur;
                 task1.reset();
@@ -421,16 +405,19 @@ namespace extension{
                 task1.mateReadId = input.readId2;
                 task1.decodedMate = dec2_35;
                 task1.decodedMateRevC = dec2_53;
-                task1.resultsequence = dec1_53;
-                task1.totalDecodedAnchors.emplace_back(task1.resultsequence);
-                task1.totalAnchorBeginInExtendedRead.emplace_back(0);
 
-                task1.currentQualityScores.insert(task1.currentQualityScores.begin(), input.qualityScores1.begin(), input.qualityScores1.end());
-                task1.resultQualityScores = task1.currentQualityScores;
-                task1.totalAnchorQualityScores.emplace_back(task1.currentQualityScores);
-
+                task1.inputAnchor = dec1_53;
+                task1.inputAnchorQualityScores = std::string{input.qualityScores1.begin(), input.qualityScores1.end()};
                 task1.mateQualityScoresReversed.insert(task1.mateQualityScoresReversed.begin(), input.qualityScores2.begin(), input.qualityScores2.end());
                 std::reverse(task1.mateQualityScoresReversed.begin(), task1.mateQualityScoresReversed.end());
+
+                task1.extendedSequenceLength = task1.inputAnchor.size();
+                task1.extendedSequence.resize(extendedSequencePitch);
+                std::copy(task1.inputAnchor.begin(), task1.inputAnchor.end(), task1.extendedSequence.begin());
+
+                task1.qualityOfExtendedSequence.resize(extendedSequencePitch);
+                std::copy(task1.inputAnchorQualityScores.begin(), task1.inputAnchorQualityScores.end(), task1.qualityOfExtendedSequence.begin());
+
 
                 ++cur;
 
@@ -450,14 +437,18 @@ namespace extension{
                 task2.mateReadId = std::numeric_limits<read_number>::max();
                 //task2.decodedMate
                 //task2.decodedMateRevC
-                task2.resultsequence = dec2_53;
-                task2.totalDecodedAnchors.emplace_back(task2.resultsequence);
-                task2.totalAnchorBeginInExtendedRead.emplace_back(0);
 
-                task2.currentQualityScores.insert(task2.currentQualityScores.begin(), input.qualityScores2.begin(), input.qualityScores2.end());
-                std::reverse(task2.currentQualityScores.begin(), task2.currentQualityScores.end());
-                task2.resultQualityScores = task2.currentQualityScores;
-                task2.totalAnchorQualityScores.emplace_back(task2.currentQualityScores);
+                task2.inputAnchor = dec2_53;
+                task2.inputAnchorQualityScores = std::string{input.qualityScores2.begin(), input.qualityScores2.end()};
+                std::reverse(task2.inputAnchorQualityScores.begin(), task2.inputAnchorQualityScores.end());
+
+
+                task2.extendedSequenceLength = task2.inputAnchor.size();
+                task2.extendedSequence.resize(extendedSequencePitch);
+                std::copy(task2.inputAnchor.begin(), task2.inputAnchor.end(), task2.extendedSequence.begin());
+
+                task2.qualityOfExtendedSequence.resize(extendedSequencePitch);
+                std::copy(task2.inputAnchorQualityScores.begin(), task2.inputAnchorQualityScores.end(), task2.qualityOfExtendedSequence.begin());
 
                 ++cur;
 
@@ -477,16 +468,19 @@ namespace extension{
                 task3.mateReadId = input.readId1;
                 task3.decodedMate = dec1_53;
                 task3.decodedMateRevC = dec1_35;
-                task3.resultsequence = dec2_35;
-                task3.totalDecodedAnchors.emplace_back(task3.resultsequence);
-                task3.totalAnchorBeginInExtendedRead.emplace_back(0);
 
-                task3.currentQualityScores.insert(task3.currentQualityScores.begin(), input.qualityScores2.begin(), input.qualityScores2.end());
-                task3.resultQualityScores = task3.currentQualityScores;
-                task3.totalAnchorQualityScores.emplace_back(task3.currentQualityScores);
-
+                task3.inputAnchor = dec2_35;
+                task3.inputAnchorQualityScores = std::string{input.qualityScores2.begin(), input.qualityScores2.end()};
                 task3.mateQualityScoresReversed.insert(task3.mateQualityScoresReversed.begin(), input.qualityScores1.begin(), input.qualityScores1.end());
                 std::reverse(task3.mateQualityScoresReversed.begin(), task3.mateQualityScoresReversed.end());
+
+                task3.extendedSequenceLength = task3.inputAnchor.size();
+                task3.extendedSequence.resize(extendedSequencePitch);
+                std::copy(task3.inputAnchor.begin(), task3.inputAnchor.end(), task3.extendedSequence.begin());
+
+                task3.qualityOfExtendedSequence.resize(extendedSequencePitch);
+                std::copy(task3.inputAnchorQualityScores.begin(), task3.inputAnchorQualityScores.end(), task3.qualityOfExtendedSequence.begin());
+
 
                 ++cur;
 
@@ -506,14 +500,17 @@ namespace extension{
                 task4.mateReadId = std::numeric_limits<read_number>::max();
                 //task4.decodedMate = dec1_53;
                 //task4.decodedMateRevC = dec1_35;
-                task4.resultsequence = dec1_35;
-                task4.totalDecodedAnchors.emplace_back(task4.resultsequence);
-                task4.totalAnchorBeginInExtendedRead.emplace_back(0);
 
-                task4.currentQualityScores.insert(task4.currentQualityScores.begin(), input.qualityScores1.begin(), input.qualityScores1.end());
-                std::reverse(task4.currentQualityScores.begin(), task4.currentQualityScores.end());
-                task4.resultQualityScores = task4.currentQualityScores;
-                task4.totalAnchorQualityScores.emplace_back(task4.currentQualityScores);
+                task4.inputAnchor = dec1_35;
+                task4.inputAnchorQualityScores = std::string{input.qualityScores1.begin(), input.qualityScores1.end()};
+                std::reverse(task4.inputAnchorQualityScores.begin(), task4.inputAnchorQualityScores.end());
+
+                task4.extendedSequenceLength = task4.inputAnchor.size();
+                task4.extendedSequence.resize(extendedSequencePitch);
+                std::copy(task4.inputAnchor.begin(), task4.inputAnchor.end(), task4.extendedSequence.begin());
+
+                task4.qualityOfExtendedSequence.resize(extendedSequencePitch);
+                std::copy(task4.inputAnchorQualityScores.begin(), task4.inputAnchorQualityScores.end(), task4.qualityOfExtendedSequence.begin());
 
                 ++cur;
             }

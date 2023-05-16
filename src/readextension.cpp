@@ -207,7 +207,10 @@ struct ExtensionPipeline{
 
         std::vector<read_number> pairsWhichShouldBeRepeated;
 
+        int batchId = -1;
+
         auto initInputs = [&](){
+            batchId++;
             int numReadsInBatch = 0;
             readIdGenerator->process_next_n(
                 batchsizePairs * 2, 
@@ -216,6 +219,9 @@ struct ExtensionPipeline{
                     numReadsInBatch = std::distance(currentIds.begin(), readIdsEnd);
                 }
             );
+            // if(batchId != 87680 / 2){
+            //     numReadsInBatch = 0;
+            // }
 
             if(numReadsInBatch % 2 == 1){
                 throw std::runtime_error("Input files not properly paired. Aborting read extension.");
