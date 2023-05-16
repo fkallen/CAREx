@@ -35,7 +35,7 @@
 
 
 
-#include <omp.h>
+//#include <omp.h>
 #include <cub/cub.cuh>
 #include <thrust/iterator/transform_iterator.h>
 
@@ -447,7 +447,7 @@ struct ExtensionPipeline{
                     stream,
                     mr
                 );
-                //if(batchId < 1){
+                //if(batchId == 87680 / 2){
                 // if(numNewReads > 0 && currentIds[0] == 316){
                 //     for(int i = 0; i < numNewReads; i++){
                 //         std::cout << currentIds[i] << " ";

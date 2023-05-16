@@ -1566,7 +1566,8 @@ namespace readextendergpukernels{
         char* __restrict__ extendedSequences,
         int* __restrict__ extendedSequenceLengths,
         char* __restrict__ qualitiesOfExtendedSequences,
-        int extendedSequencePitchInBytes
+        int extendedSequencePitchInBytes//,
+        //int debugindex = -1
     ){
 
         using BlockReduce = cub::BlockReduce<int, blocksize>;
@@ -1584,6 +1585,10 @@ namespace readextendergpukernels{
 
         for(int t = blockIdx.x; t < multiMSA.numMSAs; t += gridDim.x){
             const int numCandidates = d_numCandidatesPerAnchor[t];
+
+            // if(threadIdx.x == 0){
+            //     if(debugindex != -1 && debugindex == t) printf("numCandidates %d\n", numCandidates);
+            // }
 
             if(numCandidates > 0){
                 const gpu::GpuSingleMSA msa = multiMSA.getSingleMSA(t);
@@ -1648,7 +1653,7 @@ namespace readextendergpukernels{
                     if(extendBy == 0){
                         if(threadIdx.x == 0){
                             *abortReasonPtr = extension::AbortReason::MsaNotExtended;
-                            //printf("makeAnchorForNextIteration abort\n");
+                            //if(debugindex != -1 && debugindex == t) printf("makeAnchorForNextIteration abort\n");
                         }
                     }else{
           
@@ -1664,6 +1669,7 @@ namespace readextendergpukernels{
                             if(threadIdx.x == 0){
                                 extendedSequenceLengths[t] = currentExtensionLength + extendBy;
                                 //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+                               // if(debugindex != -1 && debugindex == t) printf("makeAnchorForNextIteration extendBy %d\n", extendBy);
                             }
                             
                         }
@@ -1772,6 +1778,8 @@ namespace readextendergpukernels{
                             if(threadIdx.x == 0){
                                 extendedSequenceLengths[t] = currentExtensionLength + missingPositionsBetweenAnchorEndAndMateBegin + mateLength;
                                 //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+
+                                //if(debugindex != -1 && debugindex == t) printf("finished missingPositionsBetweenAnchorEndAndMateBegin %d\n", missingPositionsBetweenAnchorEndAndMateBegin);
                             }
                         }else{
 
@@ -1791,6 +1799,8 @@ namespace readextendergpukernels{
                             if(threadIdx.x == 0){
                                 extendedSequenceLengths[t] = currentExtensionLength - anchorLength + mateStartposInConsensus + mateLength;
                                 //printf("extendedSequenceLengths[t] %d\n", extendedSequenceLengths[t]);
+
+                                //if(debugindex != -1 && debugindex == t) printf("finished missingPositionsBetweenAnchorEndAndMateBegin %d\n", missingPositionsBetweenAnchorEndAndMateBegin);
                             }
                         }
 

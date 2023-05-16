@@ -2605,11 +2605,80 @@ struct GpuReadExtender{
             initialNumCandidates
         ); CUDACHECKASYNC;
 
+        // int debugindex = -1;
+        // for(int i = 0; i < tasks->size(); i++){
+        //     if(tasks->pairId.element(i, stream) == 87680 / 2 && tasks->id.element(i, stream) == 1 && tasks->iteration.element(i, stream) <= 7){
+        //         debugindex = i;
+        //         break;
+        //     }
+        // }
+        // if(debugindex != -1){
+        //     const int num = d_numCandidatesPerAnchor.element(debugindex, stream);
+        //     const int offset = d_numCandidatesPerAnchorPrefixSum.element(debugindex, stream);
+            // std::cout << "candidates before filter\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << d_candidateReadIds.element(offset + i, stream) << " ";
+            // }
+            // std::cout << "\n";
+
+            // std::cout << "isPairedCandidate\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << d_isPairedCandidate.element(offset + i, stream) << " ";
+            // }
+            // std::cout << "\n";
+
+            // std::cout << "orientations\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << int(d_alignment_best_alignment_flags.element(offset + i, stream)) << " ";
+            // }
+            // std::cout << "\n";
+
+            // std::cout << "overlaps\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << d_alignment_overlaps.element(offset + i, stream) << " ";
+            // }
+            // std::cout << "\n";
+
+            // std::cout << "keepflags\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << d_keepflags.element(offset + i, stream) << " ";
+            // }
+            // std::cout << "\n";
+            // std::cout << "anchor\n";
+            // const int al = d_anchorSequencesLength.element(debugindex, stream);
+            // std::vector<unsigned int> h_a(encodedSequencePitchInInts);
+            // CUDACHECK(cudaMemcpyAsync(h_a.data(), d_anchorSequencesData.data() + debugindex * encodedSequencePitchInInts, sizeof(unsigned int) * encodedSequencePitchInInts, D2H, stream));
+            // CUDACHECK(cudaStreamSynchronize(stream));
+            // for(int i = 0; i < al; i++){
+            //     std::cout << SequenceHelpers::decodeBase(SequenceHelpers::getEncodedNuc2Bit(h_a.data(), al, i));
+            // }
+            // std::cout << "\n";
+            // std::cout << "candidates\n";
+            // for(int i = 0; i < num; i++){
+            //     std::cout << d_candidateReadIds.element(offset + i, stream) << " " << d_isPairedCandidate.element(offset + i, stream) << " " 
+            //         << int(d_alignment_best_alignment_flags.element(offset + i, stream)) << " " 
+            //         << d_alignment_overlaps.element(offset + i, stream) << " " 
+            //         << d_alignment_shifts.element(offset + i, stream) << " " 
+            //         << d_keepflags.element(offset + i, stream) << "\n";
+            // }
+
+        //}
+
         compactCandidateDataByFlags(
             d_keepflags.data(),
             true, //copy candidate read ids to host because they might be needed to load quality scores
             stream
         );
+
+        // if(debugindex != -1){
+        //     const int num = d_numCandidatesPerAnchor.element(debugindex, stream);
+        //     const int offset = d_numCandidatesPerAnchorPrefixSum.element(debugindex, stream);
+        //     std::cout << "candidates after filter\n";
+        //     for(int i = 0; i < num; i++){
+        //         std::cout << d_candidateReadIds.element(offset + i, stream) << " ";
+        //     }
+        //     std::cout << "\n";
+        // }
 
         setState(GpuReadExtender::State::BeforeMSA);
     }
@@ -2718,6 +2787,50 @@ struct GpuReadExtender{
             false,
             stream
         );
+
+        //int debugindex = -1;
+        // for(int i = 0; i < tasks->size(); i++){
+        //     if(tasks->pairId.element(i, stream) == 87680 / 2 && tasks->id.element(i, stream) == 1 && tasks->iteration.element(i, stream) <= 7){
+        //         debugindex = i;
+        //         break;
+        //     }
+        // }
+        // if(debugindex != -1){
+        //     const int num = d_numCandidatesPerAnchor.element(debugindex, stream);
+        //     const int offset = d_numCandidatesPerAnchorPrefixSum.element(debugindex, stream);
+        //     std::cout << "candidates after msa refinement\n";
+        //     for(int i = 0; i < num; i++){
+        //         std::cout << d_candidateReadIds.element(offset + i, stream) << " ";
+        //     }
+        //     std::cout << "\n";
+
+        //     std::cout << "consensus\n";
+        //     helpers::SimpleAllocationPinnedHost<char> h_consensus(tasks->size() * 1024);
+        //     helpers::SimpleAllocationPinnedHost<int> h_msasizes(tasks->size());
+        //     multiMSA.computeConsensus(
+        //         h_consensus.data(),
+        //         1024,
+        //         stream
+        //     );
+        //     multiMSA.computeMsaSizes(h_msasizes.data(), stream);
+        //     CUDACHECK(cudaStreamSynchronize(stream));
+        //     for(int i = 0; i < h_msasizes[debugindex]; i++){
+        //         std::cout << h_consensus[debugindex * 1024 + i];
+        //     }
+        //     std::cout << "\n";
+        //     helpers::lambda_kernel<<<1,1,0,stream>>>(
+        //         [
+        //             multiMSA = multiMSA.multiMSAView(),
+        //             debugindex = debugindex
+        //         ] __device__ (){
+        //             GpuSingleMSA msa = multiMSA.getSingleMSA(debugindex);
+        //             msa.printCounts(msa.columnProperties->firstColumn_incl, msa.columnProperties->lastColumn_excl);
+        //             msa.printWeights(msa.columnProperties->firstColumn_incl, msa.columnProperties->lastColumn_excl);
+        //         }
+        //     );
+        //     CUDACHECK(cudaStreamSynchronize(stream));
+        // }
+
         setState(GpuReadExtender::State::BeforeExtend);
     }
 
@@ -2746,6 +2859,15 @@ struct GpuReadExtender{
         );
 
         //thrust::fill_n(rmm::exec_policy_nosync(stream, mr), d_isFullyUsedCandidate.begin(), initialNumCandidates, false);
+
+        //int debugindex = -1;
+        // for(int i = 0; i < tasks->size(); i++){
+        //     if(tasks->pairId.element(i, stream) == 87680 / 2 && tasks->id.element(i, stream) == 1 && tasks->iteration.element(i, stream) <= 7){
+        //         debugindex = i;
+        //         std::cout << "iteration " << tasks->iteration.element(i, stream) << "\n";
+        //         break;
+        //     }
+        // }
       
         //compute extensions
 
@@ -2769,8 +2891,17 @@ struct GpuReadExtender{
             tasks->extendedSequences.data(),
             tasks->extendedSequenceLengths.data(),
             tasks->qualitiesOfExtendedSequences.data(),
-            tasks->extendedSequencePitchInBytes
+            tasks->extendedSequencePitchInBytes//,
+            //debugindex
         ); CUDACHECKASYNC;
+
+        // if(debugindex != -1){
+        //     const int l = tasks->extendedSequenceLengths.element(debugindex, stream);
+        //     for(int i = 0; i < l; i++){
+        //         std::cout << tasks->extendedSequences.element(debugindex * tasks->extendedSequencePitchInBytes + i, stream);
+        //     }
+        //     std::cout << "\n";
+        // }
 
 
         //CUDACHECK(cudaMemsetAsync(tasks->qualitiesOfExtendedSequences.data(), 'F', sizeof(char) * tasks->qualitiesOfExtendedSequences.size(), stream));
@@ -3339,7 +3470,24 @@ struct GpuReadExtender{
         bool* d_pairResultAnchorIsLR = reinterpret_cast<bool*>(d_pairResultMergedDifferentStrands + numResults);
 
 
-        
+        // if(finishedTasks4.pairId.element(0, stream) == 87680 / 2){
+        //     for(int t = 0; t < 4; t++){
+        //         std::cout << "task t " << t << " abort reason " << int(finishedTasks4.abortReason.element(t, stream)) 
+        //         << ", iteration " << finishedTasks4.iteration.element(t, stream)
+        //         << ", mateHasBeenFound " << finishedTasks4.mateHasBeenFound.element(t, stream) << "\n";
+        //         const int l = finishedTasks4.extendedSequenceLengths.element(t, stream);
+        //         for(int i = 0; i < l; i++){
+        //             std::cout << finishedTasks4.extendedSequences.element(t * finishedTasks4.extendedSequencePitchInBytes + i, stream);
+        //         }
+        //         std::cout << "\n";
+        //         for(int i = 0; i < l; i++){
+        //             std::cout << finishedTasks4.qualitiesOfExtendedSequences.element(t * finishedTasks4.extendedSequencePitchInBytes + i, stream);
+        //         }
+        //         std::cout << "\n";
+        //     }
+        // }
+
+
         const std::size_t smem = 3 * outputPitch;
 
         readextendergpukernels::makePairResultsFromFinishedTasksKernel<128><<<numResults, 128, smem, stream>>>(

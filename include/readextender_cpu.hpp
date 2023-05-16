@@ -1071,6 +1071,51 @@ private:
             }
 
 
+            // if(task.pairId == 87680 / 2 && task.id == 1){
+            //     if(task.iteration == 7){
+                    // std::cout << "candidates before filter\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.candidateReadIds[i] << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "isPairedCandidate\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.isPairedCandidate[i] << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "orientations\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << int(task.alignmentFlags[i]) << " ";
+                    // }
+                    // std::cout << "\n";
+                    // std::cout << "overlaps\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.alignments[i].overlap << " ";
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "keepflags\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << keepflags[i] << " ";
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "anchor\n";
+                    // for(int i = 0; i < task.currentAnchorLength; i++){
+                    //     std::cout << SequenceHelpers::decodeBase(SequenceHelpers::getEncodedNuc2Bit(task.currentAnchor.data(), task.currentAnchorLength, i));
+                    // }
+                    // std::cout << "\n";
+
+                    // std::cout << "candidates\n";
+                    // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+                    //     std::cout << task.candidateReadIds[i] << " " << task.isPairedCandidate[i] << " " 
+                    //         << int(task.alignmentFlags[i]) << " " << task.alignments[i].overlap << " " 
+                    //         << task.alignments[i].shift << " " << keepflags[i] << "\n";
+                    // }
+            //     }
+            // }
+
+
             task.numRemainingCandidates = 0;
 
             //compact inplace
@@ -1137,6 +1182,16 @@ private:
                 task.abort = true;
                 task.abortReason = extension::AbortReason::NoPairedCandidatesAfterAlignment;
             }
+
+            // if(task.pairId == 87680 / 2 && task.id == 1){
+            //     if(task.iteration == 7){
+            //         std::cout << "candidates after filter\n";
+            //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+            //             std::cout << task.candidateReadIds[i] << " ";
+            //         }
+            //         std::cout << "\n";
+            //     }
+            // }
 
             // std::cerr << "candidates of task " << task.id << " after filter in iteration "<< task.iteration << ":\n";
             // for(int i = 0; i < int(task.candidateReadIds.size()); i++){
@@ -1309,6 +1364,25 @@ private:
         }   
 
         #endif
+
+        // if(task.pairId == 87680 / 2 && task.id == 1){
+        //     if(task.iteration <= 7){
+        //         std::cout << "candidates after msa refinement\n";
+        //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+        //             std::cout << task.candidateReadIds[i] << " ";
+        //         }
+        //         std::cout << "\n";
+
+        //         std::cout << "consensus\n";
+        //         for(int i = 0; i < msa.nColumns; i++){
+        //             std::cout << msa.consensus[i];
+        //         }
+        //         std::cout << "\n";
+
+        //         msa.print(std::cout);
+        //         std::cout << "\n";
+        //     }
+        // }
 
         return msa;
     }
@@ -1497,6 +1571,16 @@ private:
 
         #endif
 
+        // if(task.pairId == 87680 / 2 && task.id == 1){
+        //     if(task.iteration == 7){
+        //         std::cout << "candidates after msa refinement\n";
+        //         for(int i = 0; i < int(task.candidateReadIds.size()); i++){
+        //             std::cout << task.candidateReadIds[i] << " ";
+        //         }
+        //         std::cout << "\n";
+        //     }
+        // }
+
         return msa;
     }
 
@@ -1560,6 +1644,9 @@ private:
         auto makeAnchorForNextIteration = [&](){            
             if(extendBy == 0){
                 task.abortReason = extension::AbortReason::MsaNotExtended;
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "makeAnchorForNextIteration abort\n";
+                // }
             }else{
                 std::copy(
                     msa.consensus.begin() + extendBy, 
@@ -1575,6 +1662,9 @@ private:
                     }
                 );
                 task.extendedSequenceLength = currentExtensionLength + extendBy;
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "makeAnchorForNextIteration extendBy " << extendBy << "\n";
+                // }
             }
         };
 
@@ -1649,6 +1739,9 @@ private:
                     );
                     task.extendedSequenceLength = currentExtensionLength + missingPositionsBetweenAnchorEndAndMateBegin + mateLength;
                     task.mateHasBeenFound = true;
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     std::cout << "finished missingPositionsBetweenAnchorEndAndMateBegin " << missingPositionsBetweenAnchorEndAndMateBegin << "\n";
+                    // }
                 }else{
                     std::copy(
                         task.decodedMateRevC.begin(),
@@ -1663,6 +1756,9 @@ private:
 
                     task.extendedSequenceLength = currentExtensionLength - anchorLength + mateStartposInConsensus + mateLength;
                     task.mateHasBeenFound = true;
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     std::cout << "finished missingPositionsBetweenAnchorEndAndMateBegin " << missingPositionsBetweenAnchorEndAndMateBegin << "\n";
+                    // }
                 }
             }else{
                 return makeAnchorForNextIteration();
@@ -1726,12 +1822,19 @@ private:
         for(const auto& indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
 
+
             if(task.numRemainingCandidates > 0){
                 // if(task.id == 1 && task.iteration == 14){
                 //     std::cerr << "task.numRemainingCandidates = " << task.numRemainingCandidates << "\n";
                 // }
 
                 const auto msa = constructMSA(task, candidateQualities.data() + offsets[&indexOfActiveTask - indicesOfActiveTasks.data()] * qualityPitchInBytes);
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "iteration " << task.iteration << "\n";
+                // }
+                // if(task.pairId == 87680 / 2 && task.id == 1){
+                //     std::cout << "numCandidates " << task.numRemainingCandidates << "\n";
+                // }
                 extendWithMsa(task, msa);
 
                 if(task.abortReason == extension::AbortReason::None){
@@ -1749,6 +1852,13 @@ private:
                         // task.goodscore += numSplits;
                         task.goodscore += 0;
                     }
+                    // if(task.pairId == 87680 / 2 && task.id == 1){
+                    //     for(int i = 0; i < task.extendedSequenceLength; i++){
+                    //         std::cout << task.extendedSequence[i];
+                    //     }
+                    //     std::cout << "\n";
+                    // }
+
                 }
             }else{
                 task.mateHasBeenFound = false;
@@ -1760,6 +1870,7 @@ private:
     }
 
     std::vector<extension::ExtendResult> constructResults(const std::vector<extension::Task>& tasks) const{
+        assert(tasks.size() % 4 == 0);
         std::vector<extension::ExtendResult> extendResults;
         extendResults.reserve(tasks.size());
 
@@ -1813,6 +1924,22 @@ private:
                 task.inputAnchorQualityScores.end(),
                 extendResult.qualityScores.begin()
             );
+
+            //if(extendResult.readId1 == 316 || extendResult.readId2 == 316){
+            // if(task.pairId == 87680 / 2){
+            //     // if(foo == 0){
+            //     //     foo = 1;
+
+            //     //     for(int i = 0; i < 4; i++){
+            //     //         std::cout << tasks[i].myReadId << " " << tasks[i].mateReadId << "\n";
+            //     //     }
+            //     // }
+            //     std::cout << "taskid " << task.id << ", mateHasBeenFound " << extendResult.mateHasBeenFound << ", abort reason " << int(task.abortReason) 
+            //         << ", read1begin " << extendResult.read1begin << ", read2begin " << extendResult.read2begin << ", goodscore " << extendResult.goodscore 
+            //         << ", iteration " << task.iteration << "\n";
+            //     std::cout << extendResult.extendedRead << "\n";
+            //     std::cout << extendResult.qualityScores << "\n";
+            // }
             
 
             // std::cout << "quality\n";
