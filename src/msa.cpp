@@ -265,7 +265,7 @@ void MultipleSequenceAlignment::print(std::ostream& os) const{
         os << countsT[i] << " ";
     }
     os << "\n";
-    auto def = os.precision();
+    //auto def = os.precision();
 //    os << std::setprecision(7);
     // os << "Weights A\n";
     // for(int i = 0; i < nColumns; i++){
