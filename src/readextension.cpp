@@ -381,7 +381,7 @@ void extend_cpu_pairedend(
     );
 
     std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipeline.executeFirstPass();    
-    pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
+    //pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
 
     submitReadyResults(
         {}, 

@@ -3490,27 +3490,61 @@ struct GpuReadExtender{
 
         const std::size_t smem = 3 * outputPitch;
 
-        readextendergpukernels::makePairResultsFromFinishedTasksKernel<128><<<numResults, 128, smem, stream>>>(
-            numResults,
-            d_pairResultAnchorIsLR,
-            d_pairResultSequences,
-            d_pairResultQualities,
-            d_pairResultLengths.data(),
-            d_pairResultRead1Begins,
-            d_pairResultRead2Begins,
-            d_pairResultMateHasBeenFound,
-            d_pairResultMergedDifferentStrands,
-            outputPitch,
-            finishedTasks4.soainputAnchorLengths.data(), 
-            finishedTasks4.extendedSequenceLengths.data(),
-            finishedTasks4.extendedSequences.data(),
-            finishedTasks4.qualitiesOfExtendedSequences.data(),
-            finishedTasks4.mateHasBeenFound.data(),
-            finishedTasks4.goodscore.data(),
-            finishedTasks4.extendedSequencePitchInBytes,
-            programOptions->minFragmentSize,
-            programOptions->maxFragmentSize
-        ); CUDACHECKASYNC;
+        if(programOptions->strictExtensionMode != 0){
+            extension::MakePairResultsStrictConfig makePairResultConfig;
+            makePairResultConfig.allowSingleStrand = programOptions->strictExtensionMode == 1;
+            makePairResultConfig.maxLengthDifferenceIfBothFoundMate = 0;
+            makePairResultConfig.singleStrandMinOverlapWithOtherStrand = 0.5f;
+            makePairResultConfig.singleStrandMinMatchRateWithOtherStrand = 0.95f;
+
+            readextendergpukernels::makePairResultsFromFinishedTasksKernel_strict<128><<<numResults, 128, smem, stream>>>(
+                numResults,
+                d_pairResultAnchorIsLR,
+                d_pairResultSequences,
+                d_pairResultQualities,
+                d_pairResultLengths.data(),
+                d_pairResultRead1Begins,
+                d_pairResultRead2Begins,
+                d_pairResultMateHasBeenFound,
+                d_pairResultMergedDifferentStrands,
+                outputPitch,
+                finishedTasks4.soainputAnchorLengths.data(), 
+                finishedTasks4.extendedSequenceLengths.data(),
+                finishedTasks4.extendedSequences.data(),
+                finishedTasks4.qualitiesOfExtendedSequences.data(),
+                finishedTasks4.mateHasBeenFound.data(),
+                finishedTasks4.goodscore.data(),
+                finishedTasks4.extendedSequencePitchInBytes,
+                programOptions->minFragmentSize,
+                programOptions->maxFragmentSize,
+                makePairResultConfig
+            ); CUDACHECKASYNC;
+        }else{
+            readextendergpukernels::makePairResultsFromFinishedTasksKernel<128><<<numResults, 128, smem, stream>>>(
+                numResults,
+                d_pairResultAnchorIsLR,
+                d_pairResultSequences,
+                d_pairResultQualities,
+                d_pairResultLengths.data(),
+                d_pairResultRead1Begins,
+                d_pairResultRead2Begins,
+                d_pairResultMateHasBeenFound,
+                d_pairResultMergedDifferentStrands,
+                outputPitch,
+                finishedTasks4.soainputAnchorLengths.data(), 
+                finishedTasks4.extendedSequenceLengths.data(),
+                finishedTasks4.extendedSequences.data(),
+                finishedTasks4.qualitiesOfExtendedSequences.data(),
+                finishedTasks4.mateHasBeenFound.data(),
+                finishedTasks4.goodscore.data(),
+                finishedTasks4.extendedSequencePitchInBytes,
+                programOptions->minFragmentSize,
+                programOptions->maxFragmentSize
+            ); CUDACHECKASYNC;
+        }
+
+
+        
 
         rawResults.h_pairResultLengths.resize(numResults);
         rawResults.resizePseudoReadBuffers(numResults, outputPitch);
@@ -3585,6 +3619,8 @@ struct GpuReadExtender{
                 gpuResult.extendedRead = std::move(s1);
                 gpuResult.qualityScores = std::move(s2);
                 gpuResult.mergedFromReadsWithoutMate = mergedDifferentStrands;
+
+                gpuResult.qualityScores.clear(); //DEBUG; REMOVE
             }
         }else{
             for(int p = 0; p < rawResults.numResults; p++){

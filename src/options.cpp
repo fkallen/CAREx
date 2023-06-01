@@ -181,6 +181,10 @@ namespace care{
             result.replicateGpuHashtables = pr["replicateGpuHashtables"].as<bool>();
         }
 
+        if(pr.count("strictExtensionMode")){
+            result.strictExtensionMode = pr["strictExtensionMode"].as<int>();
+        }
+
         if(pr.count("gpuReadDataLayout")){
             int val = pr["gpuReadDataLayout"].as<int>();
             GpuDataLayout opt;
@@ -548,6 +552,7 @@ namespace care{
         stream << "Sort extended reads: " << sortedOutput << "\n";
         stream << "Output remaining reads: " << outputRemainingReads << "\n";
 	    stream << "fixedStepsize: " << fixedStepsize << "\n";
+        stream << "Replicate GPU hashtables: " << replicateGpuHashtables << "\n";
     }
 
     void ProgramOptions::printAdditionalOptionsExtendCpu(std::ostream&) const{
@@ -558,7 +563,7 @@ namespace care{
         stream << "Batch size: " << batchsize << "\n";
         stream << "Warpcore: " << warpcore << "\n";
 	    stream << "Replicate GPU reads: " << replicateGpuReadData << "\n";
-        stream << "Replicate GPU hashtables " << replicateGpuHashtables << "\n";
+        stream << "Strict extension mode: " << strictExtensionMode << "\n";
         stream << "GPU read layout " << to_string(gpuReadDataLayout) << "\n";
         stream << "GPU hashtable layout " << to_string(gpuHashtableLayout) << "\n";
 
@@ -695,8 +700,12 @@ namespace care{
             ("outputRemaining", "Output remaining reads which could not be extended. Will be sorted by read id."
                 "Default: " + tostring(ProgramOptions{}.outputRemainingReads), cxxopts::value<bool>()->implicit_value("true"))
             ("fixedStepsize", "fixedStepsize "
-                "Default: " + tostring(ProgramOptions{}.fixedStepsize),
-            cxxopts::value<int>());
+                "Default: " + tostring(ProgramOptions{}.fixedStepsize), cxxopts::value<int>())
+            ("strictExtensionMode", "Use strict mode to reject more pseudo-reads in favor of more accurate pseudo-read lengths. "
+                "0: No strict mode. "
+                "1: Only consider pseudo-reads where at least one strand reached the mate."
+                "2: Only consider pseudo-reads where both strands reached the mate."
+                "Default: " + std::to_string(ProgramOptions{}.strictExtensionMode), cxxopts::value<int>());
     }
 
     void addAdditionalOptionsExtendCpu(cxxopts::Options&){
@@ -713,8 +722,8 @@ namespace care{
                 cxxopts::value<int>())
             ("replicateGpuReadData", "If reads fit into the memory of a single GPU, allow its replication to other GPUs. This can improve the runtime when multiple GPUs are used."
                 "Default: " + std::to_string(ProgramOptions{}.replicateGpuReadData), cxxopts::value<bool>())
-            ("replicateGpuHashtables", "Construct warpcore hashtables on a single GPU, then replicate them on each GPU"
-                "Default: " + std::to_string(ProgramOptions{}.replicateGpuHashtables), cxxopts::value<bool>())
+            ("replicateGpuHashtables", "Construct warpcore hashtables on a single GPU, then replicate them on each GPU."
+                "Default: " + std::to_string(ProgramOptions{}.replicateGpuHashtables), cxxopts::value<bool>())            
             ("gpuReadDataLayout", "GPU read layout. 0: first fit, 1: even share", cxxopts::value<int>())
             ("gpuHashtableLayout", "GPU hash table layout. 0: first fit, 1: even share", cxxopts::value<int>())
             ("gpuExtenderThreadConfig", "Per-GPU thread configuration for extension. Format numExtenders(int):numHashers(int)."

@@ -1,6 +1,8 @@
 #ifndef CARE_READEXTENDER_GPU_KERNELS_CUH
 #define CARE_READEXTENDER_GPU_KERNELS_CUH
 
+#include <readextender_common.hpp>
+
 #include <gpu/cudaerrorcheck.cuh>
 #include <gpu/groupmemcpy.cuh>
 #include <msasplits.hpp>
@@ -2504,6 +2506,445 @@ namespace readextendergpukernels{
 
         }
     }
+
+    template<int blocksize>
+    __global__
+    void makePairResultsFromFinishedTasksKernel_strict(
+        int numResults,
+        bool* __restrict__ outputAnchorIsLR,
+        char* __restrict__ outputSequences,
+        char* __restrict__ outputQualities,
+        int* __restrict__ outputLengths,
+        int* __restrict__ outRead1Begins,
+        int* __restrict__ outRead2Begins,
+        bool* __restrict__ outMateHasBeenFound,
+        bool* __restrict__ outMergedDifferentStrands,
+        int outputPitch,
+        const int* __restrict__ originalReadLengths,
+        const int* __restrict__ dataExtendedReadLengths,
+        const char* __restrict__ dataExtendedReadSequences,
+        const char* __restrict__ dataExtendedReadQualities,
+        const bool* __restrict__ dataMateHasBeenFound,
+        const float* __restrict__ dataGoodScores,
+        int inputPitch,
+        int minFragmentSize,
+        int maxFragmentSize,
+        extension::MakePairResultsStrictConfig config
+    ){
+        auto group = cg::this_thread_block();
+        const int numGroupsInGrid = (blockDim.x * gridDim.x) / group.size();
+        const int groupIdInGrid = (threadIdx.x + blockDim.x * blockIdx.x) / group.size();
+
+        extern __shared__ int smemForResults[];
+        char* const smemChars = (char*)&smemForResults[0];
+        char* const smemSequence = smemChars;
+        char* const smemSequence2 = smemSequence + outputPitch;
+        char* const smemQualities = smemSequence2 + outputPitch;
+
+        using BlockReduce = cub::BlockReduce<int, blocksize>;
+
+        __shared__ typename BlockReduce::TempStorage intreduce1;
+        __shared__ int smembcast;
+
+        auto checkIndex = [&](int index){
+            assert(0 <= index);
+            assert(index < outputPitch);
+        };
+
+        auto computeRead2Begin = [&](int i){
+            if(dataMateHasBeenFound[i]){
+                //extendedRead.length() - task.decodedMateRevC.length();
+                return dataExtendedReadLengths[i] - originalReadLengths[i+1];
+            }else{
+                return -1;
+            }
+        };
+
+        auto mergelength = [&](int l, int r){
+            assert(l+1 == r);
+            assert(l % 2 == 0);
+
+            const int lengthR = dataExtendedReadLengths[r];
+
+            const int read2begin = computeRead2Begin(l);
+   
+            auto overlapstart = read2begin;
+
+            const int resultsize = overlapstart + lengthR;
+            
+            return resultsize;
+        };
+
+        //merge extensions of the same pair and same strand and append to result
+        auto merge = [&](auto& group, int l, int r, char* sequenceOutput, char* qualityOutput){
+            assert(l+1 == r);
+            assert(l % 2 == 0);
+
+            const int lengthL = dataExtendedReadLengths[l];
+            const int lengthR = dataExtendedReadLengths[r];
+            const int originalLengthR = originalReadLengths[r];
+   
+            auto overlapstart = computeRead2Begin(l);
+
+            for(int i = group.thread_rank(); i < lengthL; i += group.size()){
+                checkIndex(i);
+                sequenceOutput[i] 
+                    = dataExtendedReadSequences[l * inputPitch + i];
+            }
+
+            for(int i = group.thread_rank(); i < lengthR - originalLengthR; i += group.size()){
+                checkIndex(lengthL + i);
+                checkIndex(originalLengthR + i);
+                sequenceOutput[lengthL + i] 
+                    = dataExtendedReadSequences[r * inputPitch + originalLengthR + i];
+            }
+
+            for(int i = group.thread_rank(); i < lengthL; i += group.size()){
+                checkIndex(i);
+                qualityOutput[i] 
+                    = dataExtendedReadQualities[l * inputPitch + i];
+            }
+
+            for(int i = group.thread_rank(); i < lengthR - originalLengthR; i += group.size()){
+                checkIndex(lengthL + i);
+                checkIndex(originalLengthR + i);
+                qualityOutput[lengthL + i] 
+                    = dataExtendedReadQualities[r * inputPitch + originalLengthR + i];
+            }
+        };
+    
+        //process pair at position pairIdsToProcess[posInList] and store to result position posInList
+        for(int posInList = groupIdInGrid; posInList < numResults; posInList += numGroupsInGrid){
+            group.sync(); //reuse smem
+
+            const int p = posInList;
+
+            const int i0 = 4 * p + 0;
+            const int i1 = 4 * p + 1;
+            const int i2 = 4 * p + 2;
+            const int i3 = 4 * p + 3;
+
+            char* const myResultSequence = outputSequences + posInList * outputPitch;
+            char* const myResultQualities = outputQualities + posInList * outputPitch;
+            int* const myResultRead1Begins = outRead1Begins + posInList;
+            int* const myResultRead2Begins = outRead2Begins + posInList;
+            int* const myResultLengths = outputLengths + posInList;
+            bool* const myResultAnchorIsLR = outputAnchorIsLR + posInList;
+            bool* const myResultMateHasBeenFound = outMateHasBeenFound + posInList;
+            bool* const myResultMergedDifferentStrands = outMergedDifferentStrands + posInList;
+            
+
+            auto LRmatefoundfunc = [&](){
+                const int extendedReadLength3 = dataExtendedReadLengths[i3];
+                const int originalLength3 = originalReadLengths[i3];
+
+                int resultsize = mergelength(i0, i1);
+                if(extendedReadLength3 > originalLength3){
+                    resultsize += extendedReadLength3 - originalLength3;
+                }                
+
+                int currentsize = 0;
+
+                if(extendedReadLength3 > originalLength3){
+                    //insert extensions of reverse complement of d3 at beginning
+
+                    for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
+                        myResultSequence[k] = SequenceHelpers::complementBaseDecoded(
+                            dataExtendedReadSequences[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k]
+                        );
+                    }
+
+                    for(int k = group.thread_rank(); k < (extendedReadLength3 - originalLength3); k += group.size()){
+                        checkIndex(k);
+                        checkIndex(originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k);
+                        myResultQualities[k] = 
+                            dataExtendedReadQualities[i3 * inputPitch + originalLength3 + (extendedReadLength3 - originalLength3) - 1 - k];
+                    }
+
+                    currentsize = (extendedReadLength3 - originalLength3);
+                }
+
+                merge(group, i0, i1, myResultSequence + currentsize, myResultQualities + currentsize);
+
+                int read1begin = 0;
+                int read2begin = computeRead2Begin(i0);
+
+                if(extendedReadLength3 > originalLength3){                    
+                    read1begin += (extendedReadLength3 - originalLength3);
+                    read2begin += (extendedReadLength3 - originalLength3);
+                }
+
+                if(group.thread_rank() == 0){
+                    *myResultRead1Begins = read1begin;
+                    *myResultRead2Begins = read2begin;
+                    *myResultLengths = resultsize;
+                    *myResultAnchorIsLR = true;
+                    *myResultMateHasBeenFound = true;
+                    *myResultMergedDifferentStrands = false;
+                }
+            };
+
+            auto RLmatefoundfunc = [&](){
+                const int extendedReadLength1 = dataExtendedReadLengths[i1];
+                const int originalLength1 = originalReadLengths[i1];
+
+                const int mergedLength = mergelength(i2, i3);
+                int resultsize = mergedLength;
+                if(extendedReadLength1 > originalLength1){
+                    resultsize += extendedReadLength1 - originalLength1;
+                }
+
+                merge(group, i2, i3, smemSequence, smemQualities);
+
+                group.sync();
+
+                for(int k = group.thread_rank(); k < mergedLength; k += group.size()){
+                    checkIndex(k);
+                    checkIndex(mergedLength - 1 - k);
+                    myResultSequence[k] = SequenceHelpers::complementBaseDecoded(
+                        smemSequence[mergedLength - 1 - k]
+                    );
+                }
+
+                for(int k = group.thread_rank(); k < mergedLength; k += group.size()){
+                    checkIndex(k);
+                    checkIndex(mergedLength - 1 - k);
+                    myResultQualities[k] = smemQualities[mergedLength - 1 - k];
+                }
+
+                group.sync();
+
+                const int sizeOfRightExtension = mergedLength - (computeRead2Begin(i2) + originalReadLengths[i3]);
+
+                int read1begin = 0;
+                int newread2begin = mergedLength - (read1begin + originalReadLengths[i2]);
+                int newread1begin = sizeOfRightExtension;
+
+                assert(newread1begin >= 0);
+                assert(newread2begin >= 0);
+                #ifndef NDEBUG
+                int newread2length = originalReadLengths[i2];
+                int newread1length = originalReadLengths[i3];
+                assert(newread1begin + newread1length <= mergedLength);
+                assert(newread2begin + newread2length <= mergedLength);
+                #endif
+
+                if(extendedReadLength1 > originalLength1){
+                    //insert extensions of d1 at end
+                    for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(mergedLength + k);
+                        checkIndex(originalLength1 + k);
+                        myResultSequence[mergedLength + k] = 
+                            dataExtendedReadSequences[i1 * inputPitch + originalLength1 + k];                        
+                    }
+
+                    for(int k = group.thread_rank(); k < (extendedReadLength1 - originalLength1); k += group.size()){
+                        checkIndex(mergedLength + k);
+                        checkIndex(originalLength1 + k);
+                        myResultQualities[mergedLength + k] = 
+                            dataExtendedReadQualities[i1 * inputPitch + originalLength1 + k];                        
+                    }
+                }
+
+                read1begin = newread1begin;
+                const int read2begin = newread2begin;
+                
+                if(group.thread_rank() == 0){
+                    *myResultRead1Begins = read1begin;
+                    *myResultRead2Begins = read2begin;
+                    *myResultLengths = resultsize;
+                    *myResultAnchorIsLR = false;
+                    *myResultMateHasBeenFound = true;
+                    *myResultMergedDifferentStrands = false;
+                }
+            };
+
+            auto discardExtensionFunc = [&](){
+                const int resultlength = originalReadLengths[i0];
+                for(int k = group.thread_rank(); k < resultlength; k += group.size()){
+                    checkIndex(k);
+                    myResultSequence[k] = dataExtendedReadSequences[i0 * inputPitch + k];
+                }
+
+                for(int k = group.thread_rank(); k < resultlength; k += group.size()){
+                    checkIndex(k);
+                    myResultQualities[k] = dataExtendedReadQualities[i0 * inputPitch + k];
+                }
+                if(group.thread_rank() == 0){
+                    *myResultRead1Begins = 0;
+                    *myResultRead2Begins = -1;
+                    *myResultLengths = resultlength;
+                    *myResultAnchorIsLR = true;
+                    *myResultMateHasBeenFound = false;
+                    *myResultMergedDifferentStrands = false;
+                }
+            };
+
+            if(dataMateHasBeenFound[i0] && dataMateHasBeenFound[i2]){
+                const int lengthDifference = dataExtendedReadLengths[i0] > dataExtendedReadLengths[i2] ? 
+                    dataExtendedReadLengths[i0] - dataExtendedReadLengths[i2]
+                    : dataExtendedReadLengths[i2] - dataExtendedReadLengths[i0];
+                if(lengthDifference > config.maxLengthDifferenceIfBothFoundMate){
+                    //do not extend
+                    discardExtensionFunc();
+                }else{
+                    const int gapBegin = originalReadLengths[i0];
+                    const int gapEnd = dataExtendedReadLengths[i0] - originalReadLengths[i2];
+                    const int gapSize = std::max(0, gapEnd - gapBegin);
+
+                    const int extendedPositionsOtherStrand = dataExtendedReadLengths[i2] - originalReadLengths[i2];
+                    const int overlapsize = std::min(gapSize, extendedPositionsOtherStrand);
+                    int matchingPositions = 0;
+                    if(extendedPositionsOtherStrand > 0){
+                        //find hamming distance of overlap betweens filled gaps of both strands
+                        const int begin_i2 = originalReadLengths[i2];
+                        const int end_i2 = begin_i2 + overlapsize;
+
+                        for(int k = group.thread_rank(); k < overlapsize; k += group.size()){
+                            const int pos_i0 = gapEnd - overlapsize + k;
+                            const int pos_i2 = end_i2 - 1 - k;
+                            checkIndex(pos_i0);
+                            checkIndex(pos_i2);
+                            const char c0 = dataExtendedReadSequences[i0 * inputPitch + pos_i0];
+                            const char c2 = SequenceHelpers::complementBaseDecoded(dataExtendedReadSequences[i2 * inputPitch + pos_i2]);
+                            matchingPositions += (c0 == c2);
+                        }
+
+                        matchingPositions = BlockReduce(intreduce1).Sum(matchingPositions);
+
+                        if(threadIdx.x == 0){
+                            smembcast = matchingPositions;
+                        }
+                        __syncthreads();
+                        matchingPositions = smembcast;
+                        __syncthreads();
+                    }
+
+                    if(overlapsize == matchingPositions){
+                        LRmatefoundfunc();
+                    }else{
+                        discardExtensionFunc();
+                    }
+
+                }               
+            }else if(dataMateHasBeenFound[i0] && !dataMateHasBeenFound[i2]){
+                if(!config.allowSingleStrand){
+                    discardExtensionFunc();
+                }else{
+
+                    const int gapBegin = originalReadLengths[i0];
+                    const int gapEnd = dataExtendedReadLengths[i0] - originalReadLengths[i2];
+                    const int gapSize = std::max(0, gapEnd - gapBegin);
+
+                    const int extendedPositionsOtherStrand = dataExtendedReadLengths[i2] - originalReadLengths[i2];
+                    const int overlapsize = std::min(gapSize, extendedPositionsOtherStrand);
+
+                    // if(threadIdx.x == 0){
+                    //     printf("LR %d %d %d %d %d\n", gapBegin, gapEnd, gapSize, extendedPositionsOtherStrand, overlapsize);
+                    // }
+                    // __syncthreads();
+
+                    int matchingPositions = 0;
+                    if(extendedPositionsOtherStrand > 0){
+
+                        //find hamming distance of overlap betweens filled gaps of both strands
+
+                        const int begin_i2 = originalReadLengths[i2];
+                        const int end_i2 = begin_i2 + overlapsize;
+                        for(int k = group.thread_rank(); k < overlapsize; k += group.size()){
+                            const int pos_i0 = gapEnd - overlapsize + k;
+                            const int pos_i2 = end_i2 - 1 - k;
+                            checkIndex(pos_i0);
+                            checkIndex(pos_i2);
+                            const char c0 = dataExtendedReadSequences[i0 * inputPitch + pos_i0];
+                            const char c2 = SequenceHelpers::complementBaseDecoded(dataExtendedReadSequences[i2 * inputPitch + pos_i2]);
+                            matchingPositions += (c0 == c2);
+
+                        }
+
+                        matchingPositions = BlockReduce(intreduce1).Sum(matchingPositions);
+
+                        if(threadIdx.x == 0){
+                            smembcast = matchingPositions;
+                        }
+                        __syncthreads();
+                        matchingPositions = smembcast;
+                        __syncthreads();
+                    }
+
+                    if(overlapsize >= gapSize * config.singleStrandMinOverlapWithOtherStrand 
+                            && float(matchingPositions) / float(overlapsize) >= config.singleStrandMinMatchRateWithOtherStrand){
+                        LRmatefoundfunc();
+                    }else{
+                        discardExtensionFunc();
+                    }
+                }
+                             
+            }else if(dataMateHasBeenFound[i2] && !dataMateHasBeenFound[i0]){
+                if(!config.allowSingleStrand){
+                    discardExtensionFunc();
+                }else{
+
+                    const int gapBegin = originalReadLengths[i2];
+                    const int gapEnd = dataExtendedReadLengths[i2] - originalReadLengths[i0];
+                    const int gapSize = std::max(0, gapEnd - gapBegin);
+
+                    const int extendedPositionsOtherStrand = dataExtendedReadLengths[i0] - originalReadLengths[i0];
+
+                    const int overlapsize = std::min(gapSize, extendedPositionsOtherStrand);
+                    // if(threadIdx.x == 0){
+                    //     printf("RL %d %d %d %d %d\n", gapBegin, gapEnd, gapSize, extendedPositionsOtherStrand, overlapsize);
+                    // }
+                    // __syncthreads();
+                    int matchingPositions = 0;
+                    if(extendedPositionsOtherStrand > 0){
+
+                        //find hamming distance of overlap betweens filled gaps of both strands
+
+                        const int begin_i0 = originalReadLengths[i0];
+                        const int end_i0 = begin_i0 + overlapsize;
+
+                        for(int k = group.thread_rank(); k < overlapsize; k += group.size()){
+                            const int pos_i2 = gapEnd - overlapsize + k;
+                            const int pos_i0 = end_i0 - 1 - k;
+                            checkIndex(pos_i2);
+                            checkIndex(pos_i0);
+                            const char c2 = dataExtendedReadSequences[i2 * inputPitch + pos_i2];
+                            const char c0 = SequenceHelpers::complementBaseDecoded(dataExtendedReadSequences[i0 * inputPitch + pos_i0]);
+                            matchingPositions += (c0 == c2);
+                        }
+
+                        matchingPositions = BlockReduce(intreduce1).Sum(matchingPositions);
+
+                        if(threadIdx.x == 0){
+                            smembcast = matchingPositions;
+                        }
+                        __syncthreads();
+                        matchingPositions = smembcast;
+                        __syncthreads();
+                    }
+
+                    if(overlapsize >= gapSize * config.singleStrandMinOverlapWithOtherStrand 
+                            && float(matchingPositions) / float(overlapsize) >= config.singleStrandMinMatchRateWithOtherStrand){
+                        RLmatefoundfunc();
+                    }else{
+                        discardExtensionFunc();
+                    }
+                }
+            }else{
+                discardExtensionFunc();
+            }
+
+        }
+    }
+
+
+
+
+
+
 
     template<int blocksize, int itemsPerThread, bool inclusive, class T>
     __global__

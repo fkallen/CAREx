@@ -52,6 +52,7 @@ namespace care
         bool canUseGpu = false;
         bool replicateGpuReadData = false;
         bool replicateGpuHashtables = false;
+        int strictExtensionMode = 0;
         int warpcore = 0;
         int threads = 1;
         int batchsize = 2048;

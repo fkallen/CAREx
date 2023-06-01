@@ -1241,7 +1241,7 @@ void extend_gpu_pairedend(
         );
     
         std::vector<read_number> pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeFirstPass();
-        pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeExtraHashingPass(pairsWhichShouldBeRepeated);
+        //pairsWhichShouldBeRepeated = extensionPipelineProducerConsumer.executeExtraHashingPass(pairsWhichShouldBeRepeated);
     
         submitReadyResults(
             {}, 
@@ -1267,7 +1267,7 @@ void extend_gpu_pairedend(
         //     std::ifstream s("pairsWhichShouldBeRepeated.bin");
         //     s.read((char*)pairsWhichShouldBeRepeated.data(), 2466912);
         // }
-        pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
+        //pairsWhichShouldBeRepeated = extensionPipeline.executeExtraHashingPass(pairsWhichShouldBeRepeated);
     
         submitReadyResults(
             {}, 
