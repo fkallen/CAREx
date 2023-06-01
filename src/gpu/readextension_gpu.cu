@@ -163,7 +163,7 @@ void addNewReadsToTasks(
 };
 
 
-extension::SplittedExtensionOutput makeAndSplitExtensionOutput(
+SplittedExtensionOutput makeAndSplitExtensionOutput(
     GpuReadExtender::TaskData& finishedTasks, 
     GpuReadExtender::RawExtendResult& rawExtendResult, 
     GpuReadExtender* gpuReadExtender, 
@@ -177,7 +177,7 @@ extension::SplittedExtensionOutput makeAndSplitExtensionOutput(
 
     CUDACHECK(cudaStreamSynchronizeWrapper(stream));
 
-    std::vector<extension::ExtendResult> extensionResults = gpuReadExtender->convertRawExtendResults(rawExtendResult);
+    std::vector<ExtendResult> extensionResults = gpuReadExtender->convertRawExtendResults(rawExtendResult);
 
 
     return splitExtensionOutput(std::move(extensionResults), isRepeatedIteration);

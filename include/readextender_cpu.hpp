@@ -67,7 +67,7 @@ public:
         msaTimer.print();
     }
 
-    std::vector<extension::ExtendResult> extend(const std::vector<extension::ExtendInput>& inputs, bool doExtraHash){
+    std::vector<ExtendResult> extend(const std::vector<ExtendInput>& inputs, bool doExtraHash){
         auto tasks = makePairedEndTasksFromInput4(inputs.begin(), inputs.end());
         
         auto extendedTasks = processPairedEndTasks(tasks, doExtraHash);
@@ -109,7 +109,7 @@ private:
 
     struct ExtendWithMsaResult{
         bool mateHasBeenFound = false;
-        extension::AbortReason abortReason = extension::AbortReason::None;
+        AbortReason abortReason = AbortReason::None;
         int newLength = 0;
         int newAccumExtensionLength = 0;
         int sizeOfGapToMate = 0;
@@ -117,8 +117,8 @@ private:
         std::string newQuality = "";
     };    
 
-    std::vector<extension::Task>& processPairedEndTasks(
-        std::vector<extension::Task>& tasks,
+    std::vector<Task>& processPairedEndTasks(
+        std::vector<Task>& tasks,
         bool doExtraHash
     ) const{
  
@@ -147,7 +147,7 @@ private:
         return tasks;
     }
 
-    void doOneExtensionIteration(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks, bool doExtraHash) const{
+    void doOneExtensionIteration(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks, bool doExtraHash) const{
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
 
@@ -267,7 +267,7 @@ private:
 
             // const int numCandidates = task.candidateReadIds.size();
 
-            // if(numCandidates > 0 && task.abortReason == extension::AbortReason::None){
+            // if(numCandidates > 0 && task.abortReason == AbortReason::None){
             //     assert(task.totalAnchorBeginInExtendedRead.size() >= 2);
             //     const int oldAccumExtensionsLength 
             //         = task.totalAnchorBeginInExtendedRead[task.totalAnchorBeginInExtendedRead.size() - 2];
@@ -371,7 +371,7 @@ private:
         }
     }
 
-    void getCandidateReadIds(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void getCandidateReadIds(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         #if 0
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
@@ -463,7 +463,7 @@ private:
         #endif
     }
 
-    void getCandidateReadIdsWithExtraExtensionHash(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void getCandidateReadIdsWithExtraExtensionHash(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
 
         //for each task, two strings will be hashed. the current sequence, and the part which has been extended by the previous iteration
         const int numAnchors = indicesOfActiveTasks.size();        
@@ -584,7 +584,7 @@ private:
         }
     }
 
-    void removeUsedIdsAndMateIds(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void removeUsedIdsAndMateIds(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
 
@@ -641,7 +641,7 @@ private:
         }
     }
 
-    void loadCandidateSequenceData(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void loadCandidateSequenceData(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         #if 0
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
@@ -749,7 +749,7 @@ private:
         #endif
     }
 
-    void computePairFlags(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void computePairFlags(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         const int numTasks = indicesOfActiveTasks.size();
 
         for(int indexOfActiveTask : indicesOfActiveTasks){
@@ -864,7 +864,7 @@ private:
         }
     }
 
-    void eraseDataOfRemovedMates(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void eraseDataOfRemovedMates(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
@@ -945,7 +945,7 @@ private:
         }
     }
 
-    void calculateAlignments(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void calculateAlignments(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
 
@@ -1011,7 +1011,7 @@ private:
         }
     }
 
-    void filterAlignments(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void filterAlignments(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         for(int indexOfActiveTask : indicesOfActiveTasks){
             auto& task = tasks[indexOfActiveTask];
 
@@ -1180,7 +1180,7 @@ private:
 
             if(task.numRemainingCandidates == 0){
                 task.abort = true;
-                task.abortReason = extension::AbortReason::NoPairedCandidatesAfterAlignment;
+                task.abortReason = AbortReason::NoPairedCandidatesAfterAlignment;
             }
 
             // if(task.pairId == 87680 / 2 && task.id == 1){
@@ -1202,7 +1202,7 @@ private:
         }
     }
 
-    MultipleSequenceAlignment constructMSA(extension::Task& task, char* candidateQualities) const{
+    MultipleSequenceAlignment constructMSA(Task& task, char* candidateQualities) const{
         MultipleSequenceAlignment msa(qualityConversion);
 
         const bool useQualityScoresForMSA = true;
@@ -1387,7 +1387,7 @@ private:
         return msa;
     }
 
-    MultipleSequenceAlignment constructMSA(extension::Task& task) const{
+    MultipleSequenceAlignment constructMSA(Task& task) const{
         MultipleSequenceAlignment msa(qualityConversion);
 
         std::vector<char> candidateQualities(task.numRemainingCandidates * qualityPitchInBytes);
@@ -1584,7 +1584,7 @@ private:
         return msa;
     }
 
-    void extendWithMsa(extension::Task& task, const MultipleSequenceAlignment& msa) const{
+    void extendWithMsa(Task& task, const MultipleSequenceAlignment& msa) const{
         
         // if(task.myReadId == 0 && task.id == 3 && maxextensionPerStep == 6){
         //     std::cerr << "task id " << task.id << " myReadId " << task.myReadId << "\n";
@@ -1643,7 +1643,7 @@ private:
 
         auto makeAnchorForNextIteration = [&](){            
             if(extendBy == 0){
-                task.abortReason = extension::AbortReason::MsaNotExtended;
+                task.abortReason = AbortReason::MsaNotExtended;
                 // if(task.pairId == 87680 / 2 && task.id == 1){
                 //     std::cout << "makeAnchorForNextIteration abort\n";
                 // }
@@ -1768,7 +1768,7 @@ private:
         }
     }
 
-    void computeMSAsAndExtendTasks(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
+    void computeMSAsAndExtendTasks(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks) const{
         const int numSequences = indicesOfActiveTasks.size();
 
         std::vector<int> offsets(numSequences);
@@ -1837,7 +1837,7 @@ private:
                 // }
                 extendWithMsa(task, msa);
 
-                if(task.abortReason == extension::AbortReason::None){
+                if(task.abortReason == AbortReason::None){
                     if(!task.mateHasBeenFound){
                         // const int newAccumExtensionLength = task.accumExtensionLengths;
                         // const int extendBy = newAccumExtensionLength - oldAccumExtensionLength;
@@ -1862,21 +1862,21 @@ private:
                 }
             }else{
                 task.mateHasBeenFound = false;
-                task.abortReason = extension::AbortReason::NoPairedCandidatesAfterAlignment;
+                task.abortReason = AbortReason::NoPairedCandidatesAfterAlignment;
                 //std::cerr << "did not extend task id " << task.id << " readid " << task.myReadId << " iteration " << task.iteration << " because no candidates.\n";
             }
-            task.abort = task.abortReason != extension::AbortReason::None;
+            task.abort = task.abortReason != AbortReason::None;
         }
     }
 
-    std::vector<extension::ExtendResult> constructResults(const std::vector<extension::Task>& tasks) const{
+    std::vector<ExtendResult> constructResults(const std::vector<Task>& tasks) const{
         assert(tasks.size() % 4 == 0);
-        std::vector<extension::ExtendResult> extendResults;
+        std::vector<ExtendResult> extendResults;
         extendResults.reserve(tasks.size());
 
         for(const auto& task : tasks){
 
-            extension::ExtendResult extendResult;
+            ExtendResult extendResult;
             extendResult.direction = task.direction;
             extendResult.numIterations = task.iteration;
             extendResult.aborted = task.abort;
@@ -1952,10 +1952,10 @@ private:
         }
 
 
-        std::vector<extension::ExtendResult> extendResultsCombined;
+        std::vector<ExtendResult> extendResultsCombined;
         
         if(programOptions.strictExtensionMode != 0){
-            extension::MakePairResultsStrictConfig makePairResultConfig;
+            MakePairResultsStrictConfig makePairResultConfig;
             makePairResultConfig.allowSingleStrand = programOptions.strictExtensionMode == 1;
             makePairResultConfig.maxLengthDifferenceIfBothFoundMate = 0;
             makePairResultConfig.singleStrandMinOverlapWithOtherStrand = 0.5f;
@@ -1990,15 +1990,15 @@ private:
         return extendResultsCombined;
     }
 
-    std::vector<extension::ExtendResult> combinePairedEndDirectionResults4(
-        std::vector<extension::ExtendResult>& pairedEndDirectionResults,
+    std::vector<ExtendResult> combinePairedEndDirectionResults4(
+        std::vector<ExtendResult>& pairedEndDirectionResults,
         int minFragmentSize,
         int maxFragmentSize
     ) const {
         auto idcomp = [](const auto& l, const auto& r){ return l.getReadPairId() < r.getReadPairId();};
         //auto lengthcomp = [](const auto& l, const auto& r){ return l.extendedRead.length() < r.extendedRead.length();};
 
-        std::vector<extension::ExtendResult>& combinedResults = pairedEndDirectionResults;
+        std::vector<ExtendResult>& combinedResults = pairedEndDirectionResults;
 
         bool isSorted = std::is_sorted(
             combinedResults.begin(), 
@@ -2227,16 +2227,16 @@ private:
         return combinedResults;
     }
 
-    std::vector<extension::ExtendResult> combinePairedEndDirectionResults4_strict(
-        std::vector<extension::ExtendResult>& pairedEndDirectionResults,
+    std::vector<ExtendResult> combinePairedEndDirectionResults4_strict(
+        std::vector<ExtendResult>& pairedEndDirectionResults,
         int minFragmentSize,
         int maxFragmentSize,
-        extension::MakePairResultsStrictConfig config
+        MakePairResultsStrictConfig config
     ) const {
         auto idcomp = [](const auto& l, const auto& r){ return l.getReadPairId() < r.getReadPairId();};
         //auto lengthcomp = [](const auto& l, const auto& r){ return l.extendedRead.length() < r.extendedRead.length();};
 
-        std::vector<extension::ExtendResult>& combinedResults = pairedEndDirectionResults;
+        std::vector<ExtendResult>& combinedResults = pairedEndDirectionResults;
 
         bool isSorted = std::is_sorted(
             combinedResults.begin(), 

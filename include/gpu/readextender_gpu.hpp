@@ -235,8 +235,8 @@ struct GpuReadExtender{
         CudaEvent event{cudaEventDisableTiming};
         PinnedBuffer<int> h_tmp{2};
         PinnedBuffer<char> h_inputAnchorsDecoded{};
-        PinnedBuffer<extension::AbortReason> h_gpuabortReasons{};
-        PinnedBuffer<extension::ExtensionDirection> h_gpudirections{};
+        PinnedBuffer<AbortReason> h_gpuabortReasons{};
+        PinnedBuffer<ExtensionDirection> h_gpudirections{};
         PinnedBuffer<int> h_gpuiterations{};
         PinnedBuffer<read_number> h_gpuReadIds{};
         PinnedBuffer<read_number> h_gpuMateReadIds{};
@@ -308,8 +308,8 @@ struct GpuReadExtender{
         rmm::device_uvector<float> goodscore;
         rmm::device_uvector<read_number> myReadId;
         rmm::device_uvector<read_number> mateReadId;
-        rmm::device_uvector<extension::AbortReason> abortReason;
-        rmm::device_uvector<extension::ExtensionDirection> direction;
+        rmm::device_uvector<AbortReason> abortReason;
+        rmm::device_uvector<ExtensionDirection> direction;
         rmm::device_uvector<unsigned int> inputEncodedMate;
         rmm::device_uvector<unsigned int> inputAnchorsEncoded;
         rmm::device_uvector<char> inputAnchorQualities;
@@ -811,8 +811,8 @@ struct GpuReadExtender{
                 rmm::device_uvector<float> newgoodscore(newsize, stream, mr);
                 rmm::device_uvector<read_number> newmyReadId(newsize, stream, mr);
                 rmm::device_uvector<read_number> newmateReadId(newsize, stream, mr);
-                rmm::device_uvector<extension::AbortReason> newabortReason(newsize, stream, mr);
-                rmm::device_uvector<extension::ExtensionDirection> newdirection(newsize, stream, mr);
+                rmm::device_uvector<AbortReason> newabortReason(newsize, stream, mr);
+                rmm::device_uvector<ExtensionDirection> newdirection(newsize, stream, mr);
                 rmm::device_uvector<int> newsoainputmateLengths(newsize, stream, mr);
                 rmm::device_uvector<int> newsoainputAnchorLengths(newsize, stream, mr);
                 rmm::device_uvector<int> newnumUsedReadidsPerTask(newsize, stream, mr);
@@ -1384,7 +1384,7 @@ struct GpuReadExtender{
 
         void addScalarIterationResultData(
             const float* d_goodscores,
-            const extension::AbortReason* d_abortReasons,
+            const AbortReason* d_abortReasons,
             const bool* d_mateHasBeenFound,
             cudaStream_t stream
         ){
@@ -2840,7 +2840,7 @@ struct GpuReadExtender{
 
         rmm::device_uvector<float> d_goodscores(tasks->size(), stream, mr);
         rmm::device_uvector<bool> d_outputMateHasBeenFound(tasks->size(), stream, mr);
-        rmm::device_uvector<extension::AbortReason> d_abortReasons(tasks->size(), stream, mr);
+        rmm::device_uvector<AbortReason> d_abortReasons(tasks->size(), stream, mr);
         //rmm::device_uvector<bool> d_isFullyUsedCandidate(initialNumCandidates, stream, mr);
 
         thrust::fill_n(
@@ -2853,7 +2853,7 @@ struct GpuReadExtender{
             tasks->size(),
             thrust::make_tuple(
                 false, 
-                extension::AbortReason::None,
+                AbortReason::None,
                 0.0f
             )
         );
@@ -3325,8 +3325,8 @@ struct GpuReadExtender{
         using care::gpu::MemcpyParams;
 
         auto memcpyParams1 = cuda::std::tuple_cat(
-            cuda::std::make_tuple(MemcpyParams(rawResults.h_gpuabortReasons.data(), finishedTasks4.abortReason.data(), sizeof(extension::AbortReason) * numFinishedTasks)),
-            cuda::std::make_tuple(MemcpyParams(rawResults.h_gpudirections.data(), finishedTasks4.direction.data(), sizeof(extension::ExtensionDirection) * numFinishedTasks)),
+            cuda::std::make_tuple(MemcpyParams(rawResults.h_gpuabortReasons.data(), finishedTasks4.abortReason.data(), sizeof(AbortReason) * numFinishedTasks)),
+            cuda::std::make_tuple(MemcpyParams(rawResults.h_gpudirections.data(), finishedTasks4.direction.data(), sizeof(ExtensionDirection) * numFinishedTasks)),
             cuda::std::make_tuple(MemcpyParams(rawResults.h_gpuiterations.data(), finishedTasks4.iteration.data(), sizeof(int) * numFinishedTasks)),
             cuda::std::make_tuple(MemcpyParams(rawResults.h_gpuReadIds.data(), finishedTasks4.myReadId.data(), sizeof(read_number) * numFinishedTasks)),
             cuda::std::make_tuple(MemcpyParams(rawResults.h_gpuMateReadIds.data(), finishedTasks4.mateReadId.data(), sizeof(read_number) * numFinishedTasks)),
@@ -3491,7 +3491,7 @@ struct GpuReadExtender{
         const std::size_t smem = 3 * outputPitch;
 
         if(programOptions->strictExtensionMode != 0){
-            extension::MakePairResultsStrictConfig makePairResultConfig;
+            MakePairResultsStrictConfig makePairResultConfig;
             makePairResultConfig.allowSingleStrand = programOptions->strictExtensionMode == 1;
             makePairResultConfig.maxLengthDifferenceIfBothFoundMate = 0;
             makePairResultConfig.singleStrandMinOverlapWithOtherStrand = 0.5f;
@@ -3567,10 +3567,10 @@ struct GpuReadExtender{
         //std::cerr << "exit thread " << std::this_thread::get_id() << "\n";
     }
 
-    std::vector<extension::ExtendResult> convertRawExtendResults(const RawExtendResult& rawResults) const{
+    std::vector<ExtendResult> convertRawExtendResults(const RawExtendResult& rawResults) const{
         nvtx::ScopedRange sr("convertRawExtendResults", 7);
 
-        std::vector<extension::ExtendResult> gpuResultVector(rawResults.numResults);
+        std::vector<ExtendResult> gpuResultVector(rawResults.numResults);
 
         if(!rawResults.noReadIsExtended){
 
@@ -3600,14 +3600,14 @@ struct GpuReadExtender{
                 }
 
                 if(mateHasBeenFound){
-                    gpuResult.abortReason = extension::AbortReason::None;
+                    gpuResult.abortReason = AbortReason::None;
                 }else{
                     gpuResult.abortReason = rawResults.h_gpuabortReasons[srcindex];
                 }
 
-                gpuResult.direction = anchorIsLR ? extension::ExtensionDirection::LR : extension::ExtensionDirection::RL;
+                gpuResult.direction = anchorIsLR ? ExtensionDirection::LR : ExtensionDirection::RL;
                 gpuResult.numIterations = rawResults.h_gpuiterations[srcindex];
-                gpuResult.aborted = gpuResult.abortReason != extension::AbortReason::None;
+                gpuResult.aborted = gpuResult.abortReason != AbortReason::None;
                 gpuResult.readId1 = rawResults.h_gpuReadIds[srcindex];
                 gpuResult.readId2 = rawResults.h_gpuMateReadIds[srcindex];
                 gpuResult.originalLength = rawResults.h_gpuAnchorLengths[srcindex];
@@ -3629,9 +3629,9 @@ struct GpuReadExtender{
 
                 auto& result = gpuResultVector[p];
 
-                result.direction = extension::ExtensionDirection::LR;
+                result.direction = ExtensionDirection::LR;
                 result.numIterations = rawResults.h_gpuiterations[i0];
-                result.aborted = rawResults.h_gpuabortReasons[i0] != extension::AbortReason::None;
+                result.aborted = rawResults.h_gpuabortReasons[i0] != AbortReason::None;
                 result.abortReason = rawResults.h_gpuabortReasons[i0];
                 result.readId1 = rawResults.h_gpuReadIds[i0];
                 result.readId2 = rawResults.h_gpuMateReadIds[i0];

@@ -201,7 +201,7 @@ struct ExtensionPipeline{
             std::fill(currentQualityScores.begin(), currentQualityScores.end(), 'I');
         }
 
-        std::vector<extension::ExtendInput> inputs;
+        std::vector<ExtendInput> inputs;
 
         readExtender.setMinCoverageForExtension(minCoverageForExtension);
 

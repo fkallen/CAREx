@@ -8,7 +8,6 @@
 #include <cassert>
 
 namespace care{
-namespace extension{
 
     enum class ExtensionDirection {LR, RL};
 
@@ -323,8 +322,8 @@ namespace extension{
 
 
     __inline__
-    std::string to_string(extension::AbortReason r){
-        using ar = extension::AbortReason;
+    std::string to_string(AbortReason r){
+        using ar = AbortReason;
 
         switch(r){
             case ar::MsaNotExtended: return "MsaNotExtended";
@@ -339,8 +338,8 @@ namespace extension{
     }
 
     __inline__
-    std::string to_string(extension::ExtensionDirection r){
-        using ar = extension::ExtensionDirection;
+    std::string to_string(ExtensionDirection r){
+        using ar = ExtensionDirection;
 
         switch(r){
             case ar::LR: return "LR";
@@ -550,7 +549,7 @@ namespace extension{
 
 
     __inline__
-    void handleEarlyExitOfTasks4(std::vector<extension::Task>& tasks, const std::vector<int>& indicesOfActiveTasks){
+    void handleEarlyExitOfTasks4(std::vector<Task>& tasks, const std::vector<int>& indicesOfActiveTasks){
         constexpr bool disableOtherStrand = false;
 
         //std::cout << "Check early exit\n";
@@ -569,40 +568,40 @@ namespace extension{
             //printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task.mateHasBeenFound, task.abort, disableOtherStrand);
 
             if(whichtype == 0){
-                assert(task.direction == extension::ExtensionDirection::LR);
+                assert(task.direction == ExtensionDirection::LR);
                 assert(task.pairedEnd == true);
 
                 if(task.mateHasBeenFound){        
                     //disable LR partner task            
                     tasks[indexOfActiveTask + 1].abort = true;
-                    tasks[indexOfActiveTask + 1].abortReason = extension::AbortReason::PairedAnchorFinished;
+                    tasks[indexOfActiveTask + 1].abortReason = AbortReason::PairedAnchorFinished;
                     //disable RL search task
                     if(disableOtherStrand){
                         tasks[indexOfActiveTask + 2].abort = true;
-                        tasks[indexOfActiveTask + 2].abortReason = extension::AbortReason::OtherStrandFoundMate;
+                        tasks[indexOfActiveTask + 2].abortReason = AbortReason::OtherStrandFoundMate;
                     }
                 }else if(task.abort){
                     //disable LR partner task  
                     tasks[indexOfActiveTask + 1].abort = true;
-                    tasks[indexOfActiveTask + 1].abortReason = extension::AbortReason::PairedAnchorFinished;
+                    tasks[indexOfActiveTask + 1].abortReason = AbortReason::PairedAnchorFinished;
                 }
             }else if(whichtype == 2){
-                assert(task.direction == extension::ExtensionDirection::RL);
+                assert(task.direction == ExtensionDirection::RL);
                 assert(task.pairedEnd == true);
 
                 if(task.mateHasBeenFound){
                     //disable RL partner task
                     tasks[indexOfActiveTask + 1].abort = true;
-                    tasks[indexOfActiveTask + 1].abortReason = extension::AbortReason::PairedAnchorFinished;
+                    tasks[indexOfActiveTask + 1].abortReason = AbortReason::PairedAnchorFinished;
                     //disable LR search task
                     if(disableOtherStrand){
                         tasks[indexOfActiveTask - 2].abort = true;
-                        tasks[indexOfActiveTask - 2].abortReason = extension::AbortReason::OtherStrandFoundMate;
+                        tasks[indexOfActiveTask - 2].abortReason = AbortReason::OtherStrandFoundMate;
                     }                    
                 }else if(task.abort){
                     //disable RL partner task
                     tasks[indexOfActiveTask + 1].abort = true;
-                    tasks[indexOfActiveTask + 1].abortReason = extension::AbortReason::PairedAnchorFinished;
+                    tasks[indexOfActiveTask + 1].abortReason = AbortReason::PairedAnchorFinished;
                 }
             }
         }
@@ -665,11 +664,11 @@ namespace extension{
             er.status = ExtendedReadStatus::FoundMate;
         }else{
             if(extensionOutput.aborted){
-                if(extensionOutput.abortReason == extension::AbortReason::NoPairedCandidates
-                        || extensionOutput.abortReason == extension::AbortReason::NoPairedCandidatesAfterAlignment){
+                if(extensionOutput.abortReason == AbortReason::NoPairedCandidates
+                        || extensionOutput.abortReason == AbortReason::NoPairedCandidatesAfterAlignment){
 
                     er.status = ExtendedReadStatus::CandidateAbort;
-                }else if(extensionOutput.abortReason == extension::AbortReason::MsaNotExtended){
+                }else if(extensionOutput.abortReason == AbortReason::MsaNotExtended){
                     er.status = ExtendedReadStatus::MSANoExtension;
                 }
             }else{
@@ -692,7 +691,7 @@ namespace extension{
 
     __inline__
     SplittedExtensionOutput splitExtensionOutput(
-        std::vector<extension::ExtendResult> extensionResults,
+        std::vector<ExtendResult> extensionResults,
         bool isRepeatedIteration
     ){
 
@@ -707,10 +706,10 @@ namespace extension{
 
             if(extendedReadLength > extensionOutput.originalLength){
                 if(extensionOutput.mateHasBeenFound){
-                    extension::ExtensionResultConversionOptions opts;
+                    ExtensionResultConversionOptions opts;
                     opts.computedAfterRepetition = isRepeatedIteration;            
                     
-                    returnvalue.extendedReads.push_back(extension::makeExtendedReadFromExtensionResult(std::move(extensionOutput), opts));
+                    returnvalue.extendedReads.push_back(makeExtendedReadFromExtensionResult(std::move(extensionOutput), opts));
                 }else{
                     returnvalue.idsOfPartiallyExtendedReads.push_back(extensionOutput.readId1);
                     returnvalue.idsOfPartiallyExtendedReads.push_back(extensionOutput.readId2);
@@ -726,9 +725,6 @@ namespace extension{
     }
     
 
-
-
-} //namespace extension
 } //namespace care
 
 

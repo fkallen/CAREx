@@ -440,7 +440,7 @@ namespace readextendergpukernels{
         int maxFragmentSize,
         bool* __restrict__ d_flags,
         const int* __restrict__ iteration,
-        const extension::AbortReason* __restrict__ abortReason,
+        const AbortReason* __restrict__ abortReason,
         const bool* __restrict__ mateHasBeenFound,
         const int* __restrict__ extendedSequenceLengths        
     ){
@@ -452,7 +452,7 @@ namespace readextendergpukernels{
 
             d_flags[i] = (iteration[i] < minFragmentSize 
                 && currentExtendedLength < maxFragmentSize
-                && (abortReason[i] == extension::AbortReason::None) 
+                && (abortReason[i] == AbortReason::None) 
                 && !mateHasBeenFound[i]
             );
         }
@@ -463,10 +463,10 @@ namespace readextendergpukernels{
     void taskUpdateScalarIterationResultsKernel(
         int numTasks,
         float* __restrict__ task_goodscore,
-        extension::AbortReason* __restrict__ task_abortReason,
+        AbortReason* __restrict__ task_abortReason,
         bool* __restrict__ task_mateHasBeenFound,
         const float* __restrict__ d_goodscores,
-        const extension::AbortReason* __restrict__ d_abortReasons,
+        const AbortReason* __restrict__ d_abortReasons,
         const bool* __restrict__ d_mateHasBeenFound
     ){
         const int tid = threadIdx.x + blockIdx.x * blocksize;
@@ -483,12 +483,12 @@ namespace readextendergpukernels{
     __global__
     void taskIncrementIterationKernel(
         int numTasks,
-        const extension::ExtensionDirection* __restrict__ task_direction,
+        const ExtensionDirection* __restrict__ task_direction,
         const bool* __restrict__ task_pairedEnd,
         const bool* __restrict__ task_mateHasBeenFound,
         const int* __restrict__ task_pairId,
         const int* __restrict__ task_id,
-        extension::AbortReason* __restrict__ task_abortReason,
+        AbortReason* __restrict__ task_abortReason,
         int* __restrict__ task_iteration
     ){
         const int tid = threadIdx.x + blockIdx.x * blocksize;
@@ -504,7 +504,7 @@ namespace readextendergpukernels{
             const int whichtype = task_id[i] % 4;
 
             if(whichtype == 0){
-                assert(task_direction[i] == extension::ExtensionDirection::LR);
+                assert(task_direction[i] == ExtensionDirection::LR);
                 assert(task_pairedEnd[i] == true);
 
                 if(task_mateHasBeenFound[i]){
@@ -515,13 +515,13 @@ namespace readextendergpukernels{
                                     //disable LR partner task
                                     if constexpr (disableSecondaryIfPrimaryFindMate){
                                         if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                        task_abortReason[i + k] = extension::AbortReason::PairedAnchorFinished;
+                                        task_abortReason[i + k] = AbortReason::PairedAnchorFinished;
                                     }
                                 }else if(task_id[i+k] == task_id[i] + 2){
                                     //disable RL search task
                                     if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
                                     if constexpr (disableOtherStrand){
-                                        task_abortReason[i + k] = extension::AbortReason::OtherStrandFoundMate;
+                                        task_abortReason[i + k] = AbortReason::OtherStrandFoundMate;
                                     }
                                 }
                             }else{
@@ -531,14 +531,14 @@ namespace readextendergpukernels{
                             break;
                         }
                     }
-                }else if(task_abortReason[i] != extension::AbortReason::None){
+                }else if(task_abortReason[i] != AbortReason::None){
                     for(int k = 1; k <= 4; k++){
                         if(i+k < numTasks){
                             if(task_pairId[i + k] == task_pairId[i]){
                                 if(task_id[i + k] == task_id[i] + 1){
                                     //disable LR partner task  
                                     if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                    task_abortReason[i + k] = extension::AbortReason::PairedAnchorFinished;
+                                    task_abortReason[i + k] = AbortReason::PairedAnchorFinished;
                                     break;
                                 }
                             }else{
@@ -550,7 +550,7 @@ namespace readextendergpukernels{
                     }
                 }
             }else if(whichtype == 2){
-                assert(task_direction[i] == extension::ExtensionDirection::RL);
+                assert(task_direction[i] == ExtensionDirection::RL);
                 assert(task_pairedEnd[i] == true);
 
                 if(task_mateHasBeenFound[i]){
@@ -560,7 +560,7 @@ namespace readextendergpukernels{
                                 //disable RL partner task
                                 if constexpr (disableSecondaryIfPrimaryFindMate){
                                     if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                    task_abortReason[i + 1] = extension::AbortReason::PairedAnchorFinished;
+                                    task_abortReason[i + 1] = AbortReason::PairedAnchorFinished;
                                 }
                             }
                         }
@@ -572,7 +572,7 @@ namespace readextendergpukernels{
                                         //disable LR search task
                                         if constexpr (disableOtherStrand){
                                             if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                            task_abortReason[i - k] = extension::AbortReason::OtherStrandFoundMate;
+                                            task_abortReason[i - k] = AbortReason::OtherStrandFoundMate;
                                         }
                                     }
                                 }else{
@@ -584,14 +584,14 @@ namespace readextendergpukernels{
                         }
                     }
                     
-                }else if(task_abortReason[i] != extension::AbortReason::None){
+                }else if(task_abortReason[i] != AbortReason::None){
                     if(i+1 < numTasks){
 
                         if(task_pairId[i + 1] == task_pairId[i]){
                             if(task_id[i + 1] == task_id[i] + 1){
                                 //disable RL partner task
                                 if constexpr (debugprint) printf("i %d, whichtype %d, matefound %d, abort %d, candisableother %d\n", i, whichtype, task_mateHasBeenFound[i], task_abortReason[i], disableOtherStrand);
-                                task_abortReason[i + 1] = extension::AbortReason::PairedAnchorFinished;
+                                task_abortReason[i + 1] = AbortReason::PairedAnchorFinished;
                             }
                         }
 
@@ -658,7 +658,7 @@ namespace readextendergpukernels{
         const int* __restrict__ d_anchorSequencesLength,
         const int* __restrict__ d_oldaccumExtensionsLengths,
         const int* __restrict__ d_newaccumExtensionsLengths,
-        const extension::AbortReason* __restrict__ d_abortReasons,
+        const AbortReason* __restrict__ d_abortReasons,
         const bool* __restrict__ d_outputMateHasBeenFound,
         bool* __restrict__ d_isFullyUsedCandidate
     ){
@@ -668,7 +668,7 @@ namespace readextendergpukernels{
             const int numCandidates = d_numCandidatesPerAnchor[task];
             const auto abortReason = d_abortReasons[task];
 
-            if(numCandidates > 0 && abortReason == extension::AbortReason::None){
+            if(numCandidates > 0 && abortReason == AbortReason::None){
                 const int anchorLength = d_anchorSequencesLength[task];
                 const int offset = d_numCandidatesPerAnchorPrefixSum[task];
                 const int oldAccumExtensionsLength = d_oldaccumExtensionsLengths[task];
@@ -745,7 +745,7 @@ namespace readextendergpukernels{
         int numTasks,
         int* __restrict__ d_addNumEntriesPerTask,
         int* __restrict__ d_addNumEntriesPerTaskPrefixSum,
-        const extension::AbortReason* __restrict__ d_abortReasons,
+        const AbortReason* __restrict__ d_abortReasons,
         const bool* __restrict__ d_mateHasBeenFound,
         const int* __restrict__ d_sizeOfGapToMate
     ){
@@ -759,7 +759,7 @@ namespace readextendergpukernels{
         for(int i = tid; i < numTasks; i += stride){
             int num = 0;
 
-            if(d_abortReasons[i] == extension::AbortReason::None){
+            if(d_abortReasons[i] == AbortReason::None){
                 num = 1;
 
                 if(d_mateHasBeenFound[i]){
@@ -789,7 +789,7 @@ namespace readextendergpukernels{
         int* __restrict__ d_addAnchorBeginsInExtendedRead,
         std::size_t task_decodedSequencePitchInBytes,
         std::size_t task_qualityPitchInBytes,
-        const extension::AbortReason* __restrict__ task_abortReason,
+        const AbortReason* __restrict__ task_abortReason,
         const bool* __restrict__ task_mateHasBeenFound,
         const char* __restrict__ task_materevc,
         const char* __restrict__ task_materevcqual,
@@ -813,7 +813,7 @@ namespace readextendergpukernels{
         // }
 
         for(int i = blockIdx.x; i < numTasks; i += gridDim.x){
-            if(task_abortReason[i] == extension::AbortReason::None){                
+            if(task_abortReason[i] == AbortReason::None){                
                 const int offset = d_addNumEntriesPerTaskPrefixSum[i];
 
                 if(!task_mateHasBeenFound[i]){
@@ -1556,7 +1556,7 @@ namespace readextendergpukernels{
         const int* __restrict__ d_numCandidatesPerAnchorPrefixSum,
         const int* __restrict__ d_anchorSequencesLength,
         const int* __restrict__ d_inputMateLengths,
-        extension::AbortReason* __restrict__ d_abortReasons,
+        AbortReason* __restrict__ d_abortReasons,
         const bool* __restrict__ d_isPairedTask,
         const unsigned int* __restrict__ d_inputanchormatedata,
         const char* __restrict__ mateQualities,
@@ -1605,7 +1605,7 @@ namespace readextendergpukernels{
                 auto consensusQuality = msa.getConsensusQualityIterator();
 
 
-                extension::AbortReason* const abortReasonPtr = d_abortReasons + t;
+                AbortReason* const abortReasonPtr = d_abortReasons + t;
                 bool* const mateHasBeenFoundPtr = d_outputMateHasBeenFound + t;
 
                 char* const outputExtendedSequence = extendedSequences + t * extendedSequencePitchInBytes;
@@ -1654,7 +1654,7 @@ namespace readextendergpukernels{
                 auto makeAnchorForNextIteration = [&](){
                     if(extendBy == 0){
                         if(threadIdx.x == 0){
-                            *abortReasonPtr = extension::AbortReason::MsaNotExtended;
+                            *abortReasonPtr = AbortReason::MsaNotExtended;
                             //if(debugindex != -1 && debugindex == t) printf("makeAnchorForNextIteration abort\n");
                         }
                     }else{
@@ -1817,7 +1817,7 @@ namespace readextendergpukernels{
             }else{ //numCandidates == 0
                 if(threadIdx.x == 0){
                     d_outputMateHasBeenFound[t] = false;
-                    d_abortReasons[t] = extension::AbortReason::NoPairedCandidatesAfterAlignment;
+                    d_abortReasons[t] = AbortReason::NoPairedCandidatesAfterAlignment;
                 }
             }
         }
@@ -1835,7 +1835,7 @@ namespace readextendergpukernels{
         //const int* d_iterations,
         float* d_goodscores,
         const gpu::GPUMultiMSA multiMSA,
-        const extension::AbortReason* d_abortReasons,
+        const AbortReason* d_abortReasons,
         const bool* d_mateHasBeenFound,
         const int* accumExtensionLengthsBefore,
         const int* accumExtensionLengthsAfter,
@@ -1862,7 +1862,7 @@ namespace readextendergpukernels{
         __shared__ typename AmbiguousColumnsChecker::SplitInfos smemSplitInfos;
 
         for(int t = blockIdx.x; t < multiMSA.numMSAs; t += gridDim.x){
-            if(d_abortReasons[t] == extension::AbortReason::None && !d_mateHasBeenFound[t]){
+            if(d_abortReasons[t] == AbortReason::None && !d_mateHasBeenFound[t]){
 
                 const gpu::GpuSingleMSA msa = multiMSA.getSingleMSA(t);
 
@@ -2529,7 +2529,7 @@ namespace readextendergpukernels{
         int inputPitch,
         int minFragmentSize,
         int maxFragmentSize,
-        extension::MakePairResultsStrictConfig config
+        MakePairResultsStrictConfig config
     ){
         auto group = cg::this_thread_block();
         const int numGroupsInGrid = (blockDim.x * gridDim.x) / group.size();
@@ -3299,8 +3299,8 @@ namespace readextendergpukernels{
         float* __restrict__ goodscore,
         read_number* __restrict__ d_anchorReadIds,
         read_number* __restrict__ d_mateReadIds,
-        extension::AbortReason* __restrict__ abortReason,
-        extension::ExtensionDirection* __restrict__ direction,
+        AbortReason* __restrict__ abortReason,
+        ExtensionDirection* __restrict__ direction,
         unsigned int* __restrict__ inputEncodedMate,
         int* __restrict__ inputmateLengths,
         unsigned int* __restrict__ inputAnchorsEncoded,
@@ -3341,7 +3341,7 @@ namespace readextendergpukernels{
             pairIds[t] = d_readpair_readIds[2 * inputPairId + 0] / 2;
             iteration[t] = 0;
             goodscore[t] = 0.0f;
-            abortReason[t] = extension::AbortReason::None;
+            abortReason[t] = AbortReason::None;
 
             if(id == 0){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 0];
@@ -3349,7 +3349,7 @@ namespace readextendergpukernels{
                 inputAnchorLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
                 inputmateLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
                 pairedEnd[t] = true;
-                direction[t] = extension::ExtensionDirection::LR;
+                direction[t] = ExtensionDirection::LR;
                 extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
             }else if(id == 1){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 1];
@@ -3357,7 +3357,7 @@ namespace readextendergpukernels{
                 inputAnchorLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
                 inputmateLengths[t] = 0;
                 pairedEnd[t] = false;
-                direction[t] = extension::ExtensionDirection::LR;
+                direction[t] = ExtensionDirection::LR;
                 extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
             }else if(id == 2){
                 d_anchorReadIds[t] = d_readpair_readIds[2 * inputPairId + 1];
@@ -3365,7 +3365,7 @@ namespace readextendergpukernels{
                 inputAnchorLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
                 inputmateLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
                 pairedEnd[t] = true;
-                direction[t] = extension::ExtensionDirection::RL;
+                direction[t] = ExtensionDirection::RL;
                 extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 1];
             }else{
                 //id == 3
@@ -3374,7 +3374,7 @@ namespace readextendergpukernels{
                 inputAnchorLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
                 inputmateLengths[t] = 0;
                 pairedEnd[t] = false;
-                direction[t] = extension::ExtensionDirection::RL;
+                direction[t] = ExtensionDirection::RL;
                 extendedSequenceLengths[t] = d_readpair_readLengths[2 * inputPairId + 0];
             }
         }
