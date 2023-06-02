@@ -60,6 +60,10 @@ namespace care{
         if(pr.count("minalignmentoverlapratio")){
             result.min_overlap_ratio = pr["minalignmentoverlapratio"].as<float>();
         }
+        
+        if(pr.count("gapQualityCharacter")){
+            result.gapQualityCharacter = pr["gapQualityCharacter"].as<char>();
+        }
 
         if(pr.count("excludeAmbiguous")){
             result.excludeAmbiguousReads = pr["excludeAmbiguous"].as<bool>();
@@ -544,15 +548,15 @@ namespace care{
         stream << "Maximum memory for hash tables: " << memoryForHashtables << "\n";
         stream << "Maximum memory total: " << memoryTotalLimit << "\n";
         stream << "Hashtable load factor: " << hashtableLoadfactor << "\n";
-        stream << "Fixed number of reads: " << fixedNumberOfReads << "\n";    
+        stream << "Fixed number of reads: " << fixedNumberOfReads << "\n";   
+        stream << "Gap quality character: " << gapQualityCharacter << "\n"; 
     }
 
     void ProgramOptions::printAdditionalOptionsExtend(std::ostream& stream) const{
         stream << "Allow extension outside of gap: " << allowOutwardExtension << "\n";
         stream << "Sort extended reads: " << sortedOutput << "\n";
         stream << "Output remaining reads: " << outputRemainingReads << "\n";
-	    stream << "fixedStepsize: " << fixedStepsize << "\n";
-        stream << "Replicate GPU hashtables: " << replicateGpuHashtables << "\n";
+	    stream << "fixedStepsize: " << fixedStepsize << "\n";        
     }
 
     void ProgramOptions::printAdditionalOptionsExtendCpu(std::ostream&) const{
@@ -563,6 +567,7 @@ namespace care{
         stream << "Batch size: " << batchsize << "\n";
         stream << "Warpcore: " << warpcore << "\n";
 	    stream << "Replicate GPU reads: " << replicateGpuReadData << "\n";
+        stream << "Replicate GPU hashtables: " << replicateGpuHashtables << "\n";
         stream << "Strict extension mode: " << strictExtensionMode << "\n";
         stream << "GPU read layout " << to_string(gpuReadDataLayout) << "\n";
         stream << "GPU hashtable layout " << to_string(gpuHashtableLayout) << "\n";
@@ -688,7 +693,10 @@ namespace care{
             cxxopts::value<std::string>())
             ("hashloadfactor", "Load factor of hashtables. 0.0 < hashloadfactor < 1.0. Smaller values can improve the runtime at the expense of greater memory usage."
                 "Default: " + std::to_string(ProgramOptions{}.hashtableLoadfactor), cxxopts::value<float>())
-            ("fixedNumberOfReads", "Process only the first n reads. Default: " + tostring(ProgramOptions{}.fixedNumberOfReads), cxxopts::value<std::size_t>()); 
+            ("fixedNumberOfReads", "Process only the first n reads. Default: " + tostring(ProgramOptions{}.fixedNumberOfReads), cxxopts::value<std::size_t>())
+            ("gapQualityCharacter", "Quality score to output for extended nucleotides. Default: " + tostring(ProgramOptions{}.gapQualityCharacter), cxxopts::value<std::size_t>()); 
+
+            
     }
 
     void addAdditionalOptionsExtend(cxxopts::Options& commandLineOptions){

@@ -160,13 +160,15 @@ namespace care{
                         outputFileFormat, 
                         extendedOutputfile,
                         remainingOutputfile,
-                        programOptions.pairType
+                        programOptions.pairType,
+                        programOptions
                     );
                 }else{
                     constructOutputFileFromExtensionResults(
                         *partialResults,
                         outputFileFormat, 
-                        extendedOutputfile
+                        extendedOutputfile,
+                        programOptions
                     );
                 }
 
@@ -278,7 +280,7 @@ namespace care{
                     notExtendedIds.insert(notExtendedIds.end(), idsOfNotExtendedReads.begin(), idsOfNotExtendedReads.end());
 
                     for(const auto& er : vec){
-                        writer->writeRead(makeOutputReadFromExtendedRead(er, outputFileFormat));
+                        writer->writeRead(makeOutputReadFromExtendedRead(er, outputFileFormat, programOptions));
                     }
                 }
             );

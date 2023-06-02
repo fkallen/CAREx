@@ -13,20 +13,12 @@
 
 namespace care{
 
-void constructOutputFileFromExtensionResults(
-    const std::vector<std::string>& originalReadFiles,
-    SerializedObjectStorage& partialResults, 
-    FileFormat outputFormat,
-    const std::string& extendedOutputfile,
-    const std::string& remainingOutputfile,
-    SequencePairType pairmode,
-    bool outputToSingleFile
-);
 
 void constructOutputFileFromExtensionResults(
     SerializedObjectStorage& partialResults,
     FileFormat outputFormat,
-    const std::string& extendedOutputfile
+    const std::string& extendedOutputfile,
+    const ProgramOptions& programOptions
 );
 
 void constructOutputFileFromExtensionResults(
@@ -36,11 +28,12 @@ void constructOutputFileFromExtensionResults(
     FileFormat outputFormat,
     const std::string& extendedOutputfile,
     const std::string& remainingOutputfile,
-    SequencePairType pairmode
+    SequencePairType pairmode,
+    const ProgramOptions& programOptions
 );
 
 
-Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat);
+Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat, const ProgramOptions& programOptions);
 
 void outputUnchangedReadPairs(
     const std::vector<std::string>& originalReadFiles,

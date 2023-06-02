@@ -5,6 +5,8 @@
 #include <readlibraryio.hpp>
 #include <concurrencyhelpers.hpp>
 #include <serializedobjectstorage.hpp>
+#include <options.hpp>
+
 
 #include <string>
 #include <vector>
@@ -16,7 +18,7 @@
 namespace care{
 
     //convert extended read to struct which can be written to file
-    Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat){
+    Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat, const ProgramOptions& programOptions){
         constexpr unsigned char foundMateStatus = static_cast<unsigned char>(ExtendedReadStatus::FoundMate);
         constexpr unsigned char repeatedStatus = static_cast<unsigned char>(ExtendedReadStatus::Repeated);
         unsigned char status = static_cast<unsigned char>(extendedRead.status);
@@ -42,7 +44,7 @@ namespace care{
         res.header = sstream.str();
         res.sequence = extendedRead.getSequence();
 
-        const char pseudoreadqual = 'B';
+        const char pseudoreadqual = programOptions.gapQualityCharacter;
 
         if(outputFormat == FileFormat::FASTQ || outputFormat == FileFormat::FASTQGZ){
             res.quality.resize(res.sequence.length());
@@ -89,7 +91,8 @@ namespace care{
 void writeExtensionResultsToFile(
     SerializedObjectStorage& partialResults, 
     FileFormat outputFormat,
-    const std::string& outputfile
+    const std::string& outputfile,
+    const ProgramOptions& programOptions
 ){
 
     std::unique_ptr<SequenceFileWriter> writer = makeSequenceWriter(
@@ -125,7 +128,7 @@ void writeExtensionResultsToFile(
         const bool foundMate = (status & foundMateStatus) == foundMateStatus;
         const bool repeated = (status & repeatedStatus) == repeatedStatus;
 
-        Read res = makeOutputReadFromExtendedRead(extendedRead, outputFormat);
+        Read res = makeOutputReadFromExtendedRead(extendedRead, outputFormat, programOptions);
 
         writer->writeRead(res.header, res.sequence, res.quality);
 
@@ -207,13 +210,15 @@ void outputUnchangedReadPairs(
 void constructOutputFileFromExtensionResults(
     SerializedObjectStorage& partialResults,
     FileFormat outputFormat,
-    const std::string& extendedOutputfile
+    const std::string& extendedOutputfile,
+    const ProgramOptions& programOptions
 ){
 
     writeExtensionResultsToFile(
         partialResults,
         outputFormat,
-        extendedOutputfile
+        extendedOutputfile,
+        programOptions
     );
 }
 
@@ -224,7 +229,8 @@ void constructOutputFileFromExtensionResults(
     FileFormat outputFormat,
     const std::string& extendedOutputfile,
     const std::string& remainingOutputfile,
-    SequencePairType pairmode
+    SequencePairType pairmode,
+    const ProgramOptions& programOptions
 ){
 
     auto future1 = std::async(
@@ -233,7 +239,8 @@ void constructOutputFileFromExtensionResults(
         std::ref(partialResults),
         //FileFormat::FASTA, 
         outputFormat,
-        extendedOutputfile
+        extendedOutputfile,
+        programOptions
     );
 
     assert(std::is_sorted(idsOfNotExtended.begin(), idsOfNotExtended.end()));

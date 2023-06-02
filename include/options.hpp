@@ -41,6 +41,7 @@ namespace care
     //Options which can be parsed from command-line arguments
 
     struct ProgramOptions{
+        char gapQualityCharacter = 'A';
         bool excludeAmbiguousReads = false;
         bool useQualityScores = false;
         bool autodetectKmerlength = false;
