@@ -40,7 +40,7 @@ void constructOutputFileFromExtensionResults(
 );
 
 
-Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead);
+Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat);
 
 void outputUnchangedReadPairs(
     const std::vector<std::string>& originalReadFiles,

@@ -28,6 +28,7 @@ namespace care{
         BackgroundThread outputThread;
         std::vector<read_number> notExtendedIds;
         std::unique_ptr<SequenceFileWriter> writer;
+        FileFormat outputFileFormat;
 
         ExtensionAgent(
             const ProgramOptions& programOptions_,
@@ -39,6 +40,13 @@ namespace care{
             readStorage(&readStorage_),
             outputThread(false)
         {
+            outputFileFormat = getFileFormat(programOptions.inputfiles[0]);
+            //no gz output
+            if(outputFileFormat == FileFormat::FASTQGZ)
+                outputFileFormat = FileFormat::FASTQ;
+            if(outputFileFormat == FileFormat::FASTAGZ)
+                outputFileFormat = FileFormat::FASTA;
+
             if(programOptions.sortedOutput){
 
                 const auto rsMemInfo = readStorage->getMemoryInfo();
@@ -71,18 +79,12 @@ namespace care{
 
                 partialResults = std::make_unique<SerializedObjectStorage>(memoryLimitData, memoryLimitOffsets, programOptions.tempdirectory + "/");
             }else{
-                auto outputFormat = getFileFormat(programOptions.inputfiles[0]);
-                //no gz output
-                if(outputFormat == FileFormat::FASTQGZ)
-                    outputFormat = FileFormat::FASTQ;
-                if(outputFormat == FileFormat::FASTAGZ)
-                    outputFormat = FileFormat::FASTA;
-
+                
                 const std::string extendedOutputfile = programOptions.outputdirectory + "/" + programOptions.extendedReadsOutputfilename;
 
                 writer = makeSequenceWriter(
                     extendedOutputfile,
-                    outputFormat
+                    outputFileFormat
                 );
             }
         }
@@ -140,12 +142,12 @@ namespace care{
                 const std::string remainingOutputfile = programOptions.outputdirectory + "/" + programOptions.remainingReadsOutputfilename;
                 const std::string extendedOutputfile = programOptions.outputdirectory + "/" + programOptions.extendedReadsOutputfilename;
 
-                auto outputFormat = getFileFormat(programOptions.inputfiles[0]);
+                auto outputFileFormat = getFileFormat(programOptions.inputfiles[0]);
                 //no gz output
-                if(outputFormat == FileFormat::FASTQGZ)
-                    outputFormat = FileFormat::FASTQ;
-                if(outputFormat == FileFormat::FASTAGZ)
-                    outputFormat = FileFormat::FASTA;
+                if(outputFileFormat == FileFormat::FASTQGZ)
+                    outputFileFormat = FileFormat::FASTQ;
+                if(outputFileFormat == FileFormat::FASTAGZ)
+                    outputFileFormat = FileFormat::FASTA;
 
 
                 if(programOptions.outputRemainingReads){
@@ -155,7 +157,7 @@ namespace care{
                         programOptions.inputfiles,
                         *partialResults, 
                         notExtendedIds,
-                        outputFormat, 
+                        outputFileFormat, 
                         extendedOutputfile,
                         remainingOutputfile,
                         programOptions.pairType
@@ -163,7 +165,7 @@ namespace care{
                 }else{
                     constructOutputFileFromExtensionResults(
                         *partialResults,
-                        outputFormat, 
+                        outputFileFormat, 
                         extendedOutputfile
                     );
                 }
@@ -171,12 +173,12 @@ namespace care{
                 step3timer.print();
             }else{
 
-                auto outputFormat = getFileFormat(programOptions.inputfiles[0]);
+                auto outputFileFormat = getFileFormat(programOptions.inputfiles[0]);
                 //no gz output
-                if(outputFormat == FileFormat::FASTQGZ)
-                    outputFormat = FileFormat::FASTQ;
-                if(outputFormat == FileFormat::FASTAGZ)
-                    outputFormat = FileFormat::FASTA;
+                if(outputFileFormat == FileFormat::FASTQGZ)
+                    outputFileFormat = FileFormat::FASTQ;
+                if(outputFileFormat == FileFormat::FASTAGZ)
+                    outputFileFormat = FileFormat::FASTA;
 
                 doExtend(
                     programOptions,
@@ -200,7 +202,7 @@ namespace care{
                     outputUnchangedReadPairs(
                         programOptions.inputfiles,
                         notExtendedIds,
-                        outputFormat,
+                        outputFileFormat,
                         remainingOutputfile
                     );
 
@@ -276,7 +278,7 @@ namespace care{
                     notExtendedIds.insert(notExtendedIds.end(), idsOfNotExtendedReads.begin(), idsOfNotExtendedReads.end());
 
                     for(const auto& er : vec){
-                        writer->writeRead(makeOutputReadFromExtendedRead(er));
+                        writer->writeRead(makeOutputReadFromExtendedRead(er, outputFileFormat));
                     }
                 }
             );

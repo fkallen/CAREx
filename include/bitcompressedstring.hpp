@@ -46,7 +46,7 @@ struct BitCompressedString{
         auto nextP2 = nextLargerPowerOfTwo(diff);
         assert(nextP2 != std::numeric_limits<Data_t>::max());
 
-        bitsPerElement = int(std::log2(nextP2));
+        bitsPerElement = std::log2(nextP2);
 
         numData = ((bitsPerElement * size()) + dataTBits() - 1) / dataTBits();
 

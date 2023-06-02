@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#define CARE_USE_BIT_COMPRESED_QUALITY_FOR_ENCODED_EXTENDED
+//#define CARE_USE_BIT_COMPRESED_QUALITY_FOR_ENCODED_EXTENDED
 
 namespace care{
 
@@ -153,9 +153,9 @@ namespace care{
         int read2end = 0;
     private:
         std::string extendedSequence_raw{};
-        std::string qualityScores_raw{};
-        //std::string_view extendedSequence_sv;
-        //std::string_view qualityScores_sv;
+        std::string qualityScores_read1_raw{};
+        std::string qualityScores_read2_raw{};
+
     public:
 
         ExtendedRead() = default;
@@ -169,7 +169,8 @@ namespace care{
             if(read2begin != rhs.read2begin) return false;
             if(read2end != rhs.read2end) return false;
             if(getSequence() != rhs.getSequence()) return false;
-            if(getQuality() != rhs.getQuality()) return false;
+            if(qualityScores_read1_raw != rhs.qualityScores_read1_raw) return false;
+            if(qualityScores_read2_raw != rhs.qualityScores_read2_raw) return false;
             return true;
         }
 
@@ -183,7 +184,8 @@ namespace care{
                 + sizeof(read_number) //readid
                 + sizeof(int) * 4  //original ranges
                 + sizeof(int) + getSequence().length() //sequence
-                + sizeof(int) + getQuality().length(); // quality scores
+                + sizeof(int) + qualityScores_read1_raw.length() // quality scores
+                + sizeof(int) + qualityScores_read2_raw.length(); // quality scores
         }
 
         std::uint8_t* copyToContiguousMemory(std::uint8_t* ptr, std::uint8_t* endPtr) const{
@@ -208,19 +210,23 @@ namespace care{
                 std::memcpy(ptr, &read2end, sizeof(int));
                 ptr += sizeof(int);
 
-                int l = 0;
-                l = getSequence().length();
-                std::memcpy(ptr, &l, sizeof(int));
+                int length = getSequence().length();
+                std::memcpy(ptr, &length, sizeof(int));
                 ptr += sizeof(int);
-                std::memcpy(ptr, getSequence().data(), sizeof(char) * l);
-                ptr += sizeof(char) * l;
+                std::memcpy(ptr, getSequence().data(), sizeof(char) * length);
+                ptr += sizeof(char) * length;
 
-                int m = 0;
-                m = getQuality().length();
-                std::memcpy(ptr, &m, sizeof(int));
+                length = qualityScores_read1_raw.length();
+                std::memcpy(ptr, &length, sizeof(int));
                 ptr += sizeof(int);
-                std::memcpy(ptr, getQuality().data(), sizeof(char) * m);
-                ptr += sizeof(char) * m;
+                std::memcpy(ptr, qualityScores_read1_raw.data(), sizeof(char) * length);
+                ptr += sizeof(char) * length;
+
+                length = qualityScores_read2_raw.length();
+                std::memcpy(ptr, &length, sizeof(int));
+                ptr += sizeof(int);
+                std::memcpy(ptr, qualityScores_read2_raw.data(), sizeof(char) * length);
+                ptr += sizeof(char) * length;
 
                 return ptr;
             }else{
@@ -245,23 +251,24 @@ namespace care{
             std::memcpy(&read2end, ptr, sizeof(int));
             ptr += sizeof(int);
 
-            int l = 0;
-            std::memcpy(&l, ptr, sizeof(int));
+            int length = 0;
+            std::memcpy(&length, ptr, sizeof(int));
             ptr += sizeof(int);
-            extendedSequence_raw.resize(l);
-            std::memcpy(&extendedSequence_raw[0], ptr, sizeof(char) * l);
-            ptr += sizeof(char) * l;
+            extendedSequence_raw.resize(length);
+            std::memcpy(&extendedSequence_raw[0], ptr, sizeof(char) * length);
+            ptr += sizeof(char) * length;
 
-            //extendedSequence_sv = extendedSequence_raw;
-
-            int m = 0;
-            std::memcpy(&m, ptr, sizeof(int));
+            std::memcpy(&length, ptr, sizeof(int));
             ptr += sizeof(int);
-            qualityScores_raw.resize(m);
-            std::memcpy(&qualityScores_raw[0], ptr, sizeof(char) * m);
-            ptr += sizeof(char) * m;
+            qualityScores_read1_raw.resize(length);
+            std::memcpy(&qualityScores_read1_raw[0], ptr, sizeof(char) * length);
+            ptr += sizeof(char) * length;
 
-            //qualityScores_sv = qualityScores_raw;
+            std::memcpy(&length, ptr, sizeof(int));
+            ptr += sizeof(int);
+            qualityScores_read2_raw.resize(length);
+            std::memcpy(&qualityScores_read2_raw[0], ptr, sizeof(char) * length);
+            ptr += sizeof(char) * length;
 
             return ptr;
         }
@@ -289,15 +296,11 @@ namespace care{
             requiredBytes += sizeof(int); // read2begin
             requiredBytes += sizeof(int); // read2end
             requiredBytes += sizeof(int); // seq length
-            requiredBytes += sizeof(int); // qual length
+            requiredBytes += sizeof(int); // qual1 length
+            requiredBytes += sizeof(int); // qual2 length
             requiredBytes += sizeof(unsigned int) * numEncodedSequenceInts; // enc seq
-
-            #ifdef CARE_USE_BIT_COMPRESED_QUALITY_FOR_ENCODED_EXTENDED
-            BitCompressedString bitcompressedquality(getQuality());
-            requiredBytes += bitcompressedquality.getSerializedNumBytes();
-            #else
-            requiredBytes += sizeof(char) * getQuality().size(); //qual
-            #endif
+            requiredBytes += sizeof(char) * qualityScores_read1_raw.size(); //qual1
+            requiredBytes += sizeof(char) * qualityScores_read2_raw.size(); //qual2
 
             assert(requiredBytes < (1u << 31)); // 1 bit reserved for flag
 
@@ -325,7 +328,8 @@ namespace care{
             saveint(read2begin);
             saveint(read2end);
             saveint(getSequence().size());
-            saveint(getQuality().size());
+            saveint(qualityScores_read1_raw.size());
+            saveint(qualityScores_read2_raw.size());
 
             SequenceHelpers::encodeSequence2Bit(
                 reinterpret_cast<unsigned int*>(ptr), 
@@ -334,12 +338,8 @@ namespace care{
             );
             ptr += sizeof(unsigned int) * numEncodedSequenceInts;
 
-            #ifdef CARE_USE_BIT_COMPRESED_QUALITY_FOR_ENCODED_EXTENDED
-            ptr = bitcompressedquality.copyToContiguousMemory(ptr, ptr + bitcompressedquality.getSerializedNumBytes());
-            assert(ptr != nullptr);
-            #else
-            ptr = std::copy(getQuality().begin(), getQuality().end(), ptr);
-            #endif
+            ptr = std::copy(qualityScores_read1_raw.begin(), qualityScores_read1_raw.end(), ptr);
+            ptr = std::copy(qualityScores_read2_raw.begin(), qualityScores_read2_raw.end(), ptr);
 
             assert(target.data.get() + requiredBytes == ptr);
         }
@@ -366,9 +366,11 @@ namespace care{
             loadint(read2begin);
             loadint(read2end);
             int seqlen;
-            int quallen;
+            int qual1len;
+            int qual2len;
             loadint(seqlen);
-            loadint(quallen);
+            loadint(qual1len);
+            loadint(qual2len);
 
             extendedSequence_raw.resize(seqlen);
 
@@ -376,31 +378,20 @@ namespace care{
 
             SequenceHelpers::decode2BitSequence(extendedSequence_raw.data(), reinterpret_cast<const unsigned int*>(ptr), seqlen);
             ptr += sizeof(unsigned int) * numEncodedSequenceInts;
-            //extendedSequence_sv = extendedSequence_raw;
 
-            #ifdef CARE_USE_BIT_COMPRESED_QUALITY_FOR_ENCODED_EXTENDED
-            BitCompressedString bitcompressedqual;
-            ptr = bitcompressedqual.copyFromContiguousMemory(ptr);
+            qualityScores_read1_raw.resize(qual1len);
+            std::copy(ptr, ptr + qual1len, qualityScores_read1_raw.begin());
+            ptr += sizeof(char) * qual1len;
+
+            qualityScores_read2_raw.resize(qual2len);
+            std::copy(ptr, ptr + qual2len, qualityScores_read2_raw.begin());
+            ptr += sizeof(char) * qual2len;
+
             assert(rhs.data.get() + rhs.getNumBytes() == ptr);
-            qualityScores_raw = bitcompressedqual.getString();
-            #else
-            qualityScores_raw.resize(quallen);
-            std::copy(ptr, ptr + quallen, qualityScores_raw.begin());
-            assert(rhs.data.get() + rhs.getNumBytes() == ptr + quallen);
-            #endif
-            //qualityScores_sv = qualityScores_raw;
-
         }
 
         void removeOutwardExtension(){
             const int newlength = (read2end == -1) ? extendedSequence_raw.size() : (read2end - read1begin);
-
-            if(qualityScores_raw.size() == extendedSequence_raw.size()){
-                qualityScores_raw.erase(qualityScores_raw.begin(), qualityScores_raw.begin() + read1begin);
-                qualityScores_raw.erase(qualityScores_raw.begin() + newlength, qualityScores_raw.end());
-            }else{
-                assert(qualityScores_raw.size() == 0);
-            }
 
             extendedSequence_raw.erase(extendedSequence_raw.begin(), extendedSequence_raw.begin() + read1begin);
             extendedSequence_raw.erase(extendedSequence_raw.begin() + newlength, extendedSequence_raw.end());
@@ -418,20 +409,26 @@ namespace care{
 
         void setSequence(std::string newseq){
             extendedSequence_raw = std::move(newseq);
-            //extendedSequence_sv = extendedSequence_raw;
         }
 
-        void setQuality(std::string newqual){
-            qualityScores_raw = std::move(newqual);
-            //qualityScores_sv = qualityScores_raw;
+        void setRead1Quality(std::string quality){
+            qualityScores_read1_raw = std::move(quality);
+        }
+
+        void setRead2Quality(std::string quality){
+            qualityScores_read2_raw = std::move(quality);
         }
 
         std::string_view getSequence() const noexcept{
             return extendedSequence_raw;
         }
 
-        std::string_view getQuality() const noexcept{
-            return qualityScores_raw;
+        std::string_view getRead1Quality() const noexcept{
+            return qualityScores_read1_raw;
+        }
+
+        std::string_view getRead2Quality() const noexcept{
+            return qualityScores_read2_raw;
         }
     
     };

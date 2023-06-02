@@ -59,7 +59,8 @@ namespace care{
         read_number readId2{}; //same as input ids
 
         std::string extendedRead{};
-        std::string qualityScores{};
+        std::string read1Quality{};
+        std::string read2Quality{};
         
 
         read_number getReadPairId() const noexcept{
@@ -85,13 +86,10 @@ namespace care{
                 std::cerr << extendedRead << "\n";
                 std::cerr << rhs.extendedRead << "\n";
                  return false;
-            } 
-            if(qualityScores != rhs.qualityScores){
-                std::cerr << "error qualityScores " << readId1 << "\n";
-                std::cerr << qualityScores << "\n";
-                std::cerr << rhs.qualityScores << "\n";
-                 return false;
             }
+            if(read1Quality != rhs.read1Quality){ std::cerr << "error read1Quality\n"; return false;}
+            if(read1Quality != rhs.read2Quality){ std::cerr << "error read2Quality\n"; return false;}
+
             return true;
 
             // auto tup = [](const auto& res){
@@ -364,7 +362,8 @@ namespace care{
             << ", readId1: " << r.readId1
             << ", readId2: " << r.readId2
             << ", extendedRead: " << r.extendedRead
-            << ", qualityScores: " << r.qualityScores
+            << ", read1Quality: " << r.read1Quality
+            << ", read2Quality: " << r.read2Quality
             << "}";
         return os;
     }
@@ -623,7 +622,8 @@ namespace care{
         er.readId = extensionOutput.readId1;
         er.mergedFromReadsWithoutMate = extensionOutput.mergedFromReadsWithoutMate;
         er.setSequence(std::move(extensionOutput.extendedRead));
-        er.setQuality(std::move(extensionOutput.qualityScores));
+        er.setRead1Quality(std::move(extensionOutput.read1Quality));
+        er.setRead2Quality(std::move(extensionOutput.read2Quality));
         er.read1begin = extensionOutput.read1begin;
         er.read1end = extensionOutput.read1begin + extensionOutput.originalLength;
         er.read2begin = extensionOutput.read2begin;

@@ -228,7 +228,6 @@ struct GpuReadExtender{
     };
 
     struct RawExtendResult{
-        bool noReadIsExtended{};
         int numResults{};
         std::size_t outputpitch{};
         std::size_t decodedSequencePitchInBytes{};
@@ -3302,7 +3301,6 @@ struct GpuReadExtender{
         CUDACHECK(cudaStreamSynchronizeWrapper(stream));
 
         const int numFinishedTasks = finishedTasks4.size();
-        rawResults.noReadIsExtended = false;
         rawResults.decodedSequencePitchInBytes = decodedSequencePitchInBytes;
         rawResults.numResults = numFinishedTasks / 4;
 
@@ -3339,30 +3337,6 @@ struct GpuReadExtender{
         care::gpu::memcpyKernel<int><<<SDIV(numFinishedTasks, 256), 256, 0, stream>>>(memcpyParams1); CUDACHECKASYNC;
        
         CUDACHECK(cudaEventSynchronizeWrapper(rawResults.event));
-
-        //if there are no candidates, the resulting sequences will be identical to the input anchors. no computing required
-        // if(totalNumIterationResultsOfFinishedTasks == 0){
-        //     //finishedTasks4.consistencyCheck(true);
-
-        //     rawResults.h_inputAnchorsDecoded.resize(finishedTasks4.size() * decodedSequencePitchInBytes);
-
-        //     assert(finishedTasks4.soainputAnchorsDecoded.size() >= sizeof(char) * finishedTasks4.size() * decodedSequencePitchInBytes);
-        //     assert(rawResults.h_inputAnchorsDecoded.size() >= sizeof(char) * finishedTasks4.size() * decodedSequencePitchInBytes);
-
-        //     CUDACHECK(cudaMemcpyAsync(
-        //         rawResults.h_inputAnchorsDecoded.data(),
-        //         finishedTasks4.soainputAnchorsDecoded.data(),
-        //         sizeof(char) * finishedTasks4.size() * decodedSequencePitchInBytes,
-        //         D2H,
-        //         stream
-        //     ));
-
-        //     rawResults.noReadIsExtended = true;
-        //     rawResults.decodedSequencePitchInBytes = decodedSequencePitchInBytes;
-
-        //     return;
-        // }
-
 
         readextendergpukernels::minmaxSingleBlockKernel<512><<<1, 512, 0, stream>>>(
             finishedTasks4.extendedSequenceLengths.data(),
@@ -3572,82 +3546,54 @@ struct GpuReadExtender{
 
         std::vector<ExtendResult> gpuResultVector(rawResults.numResults);
 
-        if(!rawResults.noReadIsExtended){
+        for(int k = 0; k < rawResults.numResults; k++){
+            auto& gpuResult = gpuResultVector[k];
 
-            for(int k = 0; k < rawResults.numResults; k++){
-                auto& gpuResult = gpuResultVector[k];
+            const int index = k;
 
-                const int index = k;
+            const char* gpuSeq = &rawResults.h_pairResultSequences[k * rawResults.outputpitch];
+            const char* gpuQual = &rawResults.h_pairResultQualities[k * rawResults.outputpitch];
+            const int gpuLength = rawResults.h_pairResultLengths[k];
+            const int read1begin = rawResults.h_pairResultRead1Begins[k];
+            const int read2begin = rawResults.h_pairResultRead2Begins[k];
+            const bool anchorIsLR = rawResults.h_pairResultAnchorIsLR[k]; 
+            const bool mateHasBeenFound = rawResults.h_pairResultMateHasBeenFound[k];
+            const bool mergedDifferentStrands = rawResults.h_pairResultMergedDifferentStrands[k];
 
-                const char* gpuSeq = &rawResults.h_pairResultSequences[k * rawResults.outputpitch];
-                const char* gpuQual = &rawResults.h_pairResultQualities[k * rawResults.outputpitch];
-                const int gpuLength = rawResults.h_pairResultLengths[k];
-                const int read1begin = rawResults.h_pairResultRead1Begins[k];
-                const int read2begin = rawResults.h_pairResultRead2Begins[k];
-                const bool anchorIsLR = rawResults.h_pairResultAnchorIsLR[k]; 
-                const bool mateHasBeenFound = rawResults.h_pairResultMateHasBeenFound[k];
-                const bool mergedDifferentStrands = rawResults.h_pairResultMergedDifferentStrands[k];
+            const int i0 = 4 * index + 0;
+            const int i2 = 4 * index + 2;
 
-                std::string s1(gpuSeq, gpuLength);
-                std::string s2(gpuQual, gpuLength);
-
-                const int i0 = 4 * index + 0;
-                const int i2 = 4 * index + 2;
-
-                int srcindex = i0;
-                if(!anchorIsLR){
-                    srcindex = i2;
-                }
-
-                if(mateHasBeenFound){
-                    gpuResult.abortReason = AbortReason::None;
-                }else{
-                    gpuResult.abortReason = rawResults.h_gpuabortReasons[srcindex];
-                }
-
-                gpuResult.direction = anchorIsLR ? ExtensionDirection::LR : ExtensionDirection::RL;
-                gpuResult.numIterations = rawResults.h_gpuiterations[srcindex];
-                gpuResult.aborted = gpuResult.abortReason != AbortReason::None;
-                gpuResult.readId1 = rawResults.h_gpuReadIds[srcindex];
-                gpuResult.readId2 = rawResults.h_gpuMateReadIds[srcindex];
-                gpuResult.originalLength = rawResults.h_gpuAnchorLengths[srcindex];
-                gpuResult.originalMateLength = rawResults.h_gpuMateLengths[srcindex];
-                gpuResult.read1begin = read1begin;
-                gpuResult.goodscore = rawResults.h_gpugoodscores[srcindex];
-                gpuResult.read2begin = read2begin;
-                gpuResult.mateHasBeenFound = mateHasBeenFound;
-                gpuResult.extendedRead = std::move(s1);
-                gpuResult.qualityScores = std::move(s2);
-                gpuResult.mergedFromReadsWithoutMate = mergedDifferentStrands;
-
-                gpuResult.qualityScores.clear(); //DEBUG; REMOVE
+            int srcindex = i0;
+            if(!anchorIsLR){
+                srcindex = i2;
             }
-        }else{
-            for(int p = 0; p < rawResults.numResults; p++){
-                //LR search
-                const int i0 = 4 * p + 0;
 
-                auto& result = gpuResultVector[p];
-
-                result.direction = ExtensionDirection::LR;
-                result.numIterations = rawResults.h_gpuiterations[i0];
-                result.aborted = rawResults.h_gpuabortReasons[i0] != AbortReason::None;
-                result.abortReason = rawResults.h_gpuabortReasons[i0];
-                result.readId1 = rawResults.h_gpuReadIds[i0];
-                result.readId2 = rawResults.h_gpuMateReadIds[i0];
-                result.originalLength = rawResults.h_gpuAnchorLengths[i0];
-                result.originalMateLength = rawResults.h_gpuMateLengths[i0];
-                result.read1begin = 0;
-                result.goodscore = rawResults.h_gpugoodscores[i0];
-                result.read2begin = -1;
-                result.mateHasBeenFound = false;
-                result.extendedRead.assign(
-                    rawResults.h_inputAnchorsDecoded.begin() + i0 * rawResults.decodedSequencePitchInBytes,
-                    rawResults.h_inputAnchorsDecoded.begin() + i0 * rawResults.decodedSequencePitchInBytes + rawResults.h_gpuAnchorLengths[i0]
-                );
-                result.qualityScores.resize(rawResults.h_gpuAnchorLengths[i0]);
-                std::fill(result.qualityScores.begin(), result.qualityScores.end(), 'I');
+            if(mateHasBeenFound){
+                gpuResult.abortReason = AbortReason::None;
+            }else{
+                gpuResult.abortReason = rawResults.h_gpuabortReasons[srcindex];
             }
+
+            gpuResult.direction = anchorIsLR ? ExtensionDirection::LR : ExtensionDirection::RL;
+            gpuResult.numIterations = rawResults.h_gpuiterations[srcindex];
+            gpuResult.aborted = gpuResult.abortReason != AbortReason::None;
+            gpuResult.readId1 = rawResults.h_gpuReadIds[srcindex];
+            gpuResult.readId2 = rawResults.h_gpuMateReadIds[srcindex];
+            gpuResult.originalLength = rawResults.h_gpuAnchorLengths[srcindex];
+            gpuResult.originalMateLength = rawResults.h_gpuMateLengths[srcindex];
+            gpuResult.read1begin = read1begin;
+            gpuResult.goodscore = rawResults.h_gpugoodscores[srcindex];
+            gpuResult.read2begin = read2begin;
+            gpuResult.mateHasBeenFound = mateHasBeenFound;
+            gpuResult.extendedRead = std::string{gpuSeq, gpuLength};
+            gpuResult.mergedFromReadsWithoutMate = mergedDifferentStrands;
+
+            gpuResult.read1Quality = std::string{gpuQual + read1begin, gpuQual + read1begin + gpuResult.originalLength};
+            if(mateHasBeenFound){
+                gpuResult.read2Quality = std::string{gpuQual + read2begin, gpuQual + read2begin + gpuResult.originalMateLength};
+            }
+
+            //gpuResult.qualityScores.clear(); //DEBUG; REMOVE
         }
 
         return gpuResultVector;

@@ -16,7 +16,7 @@
 namespace care{
 
     //convert extended read to struct which can be written to file
-    Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead){
+    Read makeOutputReadFromExtendedRead(const ExtendedRead& extendedRead, FileFormat outputFormat){
         constexpr unsigned char foundMateStatus = static_cast<unsigned char>(ExtendedReadStatus::FoundMate);
         constexpr unsigned char repeatedStatus = static_cast<unsigned char>(ExtendedReadStatus::Repeated);
         unsigned char status = static_cast<unsigned char>(extendedRead.status);
@@ -41,12 +41,45 @@ namespace care{
         Read res;
         res.header = sstream.str();
         res.sequence = extendedRead.getSequence();
-        if(extendedRead.getQuality().size() != res.sequence.size()){
+
+        const char pseudoreadqual = 'B';
+
+        if(outputFormat == FileFormat::FASTQ || outputFormat == FileFormat::FASTQGZ){
             res.quality.resize(res.sequence.length());
-            std::fill(res.quality.begin(), res.quality.end(), 'F');
-        }else{
-            res.quality = extendedRead.getQuality();
+            //fill left outward extension
+            std::fill(
+                res.quality.begin(), 
+                res.quality.begin() + extendedRead.read1begin, 
+                pseudoreadqual
+            );
+            //copy read1 quality
+            auto it = std::copy(
+                extendedRead.getRead1Quality().begin(), 
+                extendedRead.getRead1Quality().end(),
+                res.quality.begin() + extendedRead.read1begin
+            );
+            if(extendedRead.read2begin != -1){
+                //fill gap
+                std::fill(
+                    it, 
+                    res.quality.begin() + extendedRead.read2begin, 
+                    pseudoreadqual
+                );
+                //copy read2 quality
+                it = std::copy(
+                    extendedRead.getRead2Quality().begin(), 
+                    extendedRead.getRead2Quality().end(),
+                    res.quality.begin() + extendedRead.read2begin
+                );
+            }
+            //fill remainder
+            std::fill(
+                it, 
+                res.quality.end(), 
+                pseudoreadqual
+            );
         }
+
 
         return res;
     }
@@ -92,7 +125,7 @@ void writeExtensionResultsToFile(
         const bool foundMate = (status & foundMateStatus) == foundMateStatus;
         const bool repeated = (status & repeatedStatus) == repeatedStatus;
 
-        Read res = makeOutputReadFromExtendedRead(extendedRead);
+        Read res = makeOutputReadFromExtendedRead(extendedRead, outputFormat);
 
         writer->writeRead(res.header, res.sequence, res.quality);
 

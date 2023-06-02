@@ -1889,41 +1889,33 @@ private:
             extendResult.goodscore = task.goodscore;
             extendResult.mateHasBeenFound = task.mateHasBeenFound;
 
-            extendResult.extendedRead = std::string{task.extendedSequence.begin(), task.extendedSequence.begin() + task.extendedSequenceLength};
-            extendResult.qualityScores = std::string{task.qualityOfExtendedSequence.begin(), task.qualityOfExtendedSequence.begin() + task.extendedSequenceLength};
-
-
-            //replace mate positions by original mate
-            if(task.mateHasBeenFound){
-                //std::cerr << "copy " << task.decodedMateRevC << " to end of consensus " << task.myReadId << "\n";
-                std::copy(
-                    task.decodedMateRevC.begin(),
-                    task.decodedMateRevC.end(),
-                    extendResult.extendedRead.begin() + task.extendedSequenceLength - task.decodedMateRevC.length()
-                );
-
-                std::copy(
-                    task.mateQualityScoresReversed.begin(),
-                    task.mateQualityScoresReversed.end(),
-                    extendResult.qualityScores.begin() + task.extendedSequenceLength - task.decodedMateRevC.length()
-                );
-
-                extendResult.read2begin = task.extendedSequenceLength - task.decodedMateRevC.length();
-            }else{
-                extendResult.read2begin = -1;
-            }
-
-            //replace anchor positions by original anchor
+            extendResult.extendedRead.resize(task.extendedSequenceLength);
             std::copy(
                 task.inputAnchor.begin(),
                 task.inputAnchor.end(),
                 extendResult.extendedRead.begin()
             );
             std::copy(
-                task.inputAnchorQualityScores.begin(),
-                task.inputAnchorQualityScores.end(),
-                extendResult.qualityScores.begin()
+                task.extendedSequence.begin() + task.myLength, 
+                task.extendedSequence.begin() + task.extendedSequenceLength,
+                extendResult.extendedRead.begin() + task.myLength
             );
+            extendResult.read1Quality = task.inputAnchorQualityScores;
+            if(task.mateHasBeenFound){
+                //replace mate positions by original mate
+                std::copy(
+                    task.decodedMateRevC.begin(),
+                    task.decodedMateRevC.end(),
+                    extendResult.extendedRead.begin() + task.extendedSequenceLength - task.decodedMateRevC.length()
+                );
+
+                extendResult.read2Quality = task.mateQualityScoresReversed;                
+                extendResult.read2begin = task.extendedSequenceLength - task.decodedMateRevC.length();
+            }else{
+                extendResult.read2begin = -1;
+            }
+
+
 
             //if(extendResult.readId1 == 316 || extendResult.readId2 == 316){
             // if(task.pairId == 87680 / 2){
@@ -1976,9 +1968,9 @@ private:
         }
 
         //DEBUG REMOVE
-        for(auto& extendResult : extendResultsCombined){
-            extendResult.qualityScores.clear();             
-        }
+        // for(auto& extendResult : extendResultsCombined){
+        //     extendResult.qualityScores.clear();             
+        // }
 
         
         // std::cout << "combined quality\n";
@@ -2024,12 +2016,12 @@ private:
 
             auto overlapstart = l.read2begin;
             l.extendedRead.resize(overlapstart + r.extendedRead.size());
-            l.qualityScores.resize(overlapstart + r.extendedRead.size());
+            //l.qualityScores.resize(overlapstart + r.extendedRead.size());
 
-            assert(int(std::distance(r.qualityScores.begin() + r.originalLength, r.qualityScores.end())) <= int(l.qualityScores.size() - beginOfNewPositions));
+            //assert(int(std::distance(r.qualityScores.begin() + r.originalLength, r.qualityScores.end())) <= int(l.qualityScores.size() - beginOfNewPositions));
 
             std::copy(r.extendedRead.begin() + r.originalLength, r.extendedRead.end(), l.extendedRead.begin() + beginOfNewPositions);
-            std::copy(r.qualityScores.begin() + r.originalLength, r.qualityScores.end(), l.qualityScores.begin() + beginOfNewPositions);
+            //std::copy(r.qualityScores.begin() + r.originalLength, r.qualityScores.end(), l.qualityScores.begin() + beginOfNewPositions);
         };
 
         for(int i = 0; i < reads; i += 1){
@@ -2040,16 +2032,19 @@ private:
 
             auto r1matefoundfunc = [&](){
                 merge(r1,r2);
+                r1.read2Quality = std::move(r2.read1Quality);
+
+                std::cout << "r1matefoundfunc. read2quality = " << r1.read2Quality  << "\n";
 
                 if(int(r4.extendedRead.size()) > r4.originalLength){
                     //insert extensions of reverse complement of r4 at beginning of r1
 
                     std::string r4revcNewPositions = SequenceHelpers::reverseComplementSequenceDecoded(r4.extendedRead.data() + r4.originalLength, r4.extendedRead.size() - r4.originalLength);
-                    std::string r4revNewQualities(r4.qualityScores.data() + r4.originalLength, r4.qualityScores.size() - r4.originalLength);
-                    std::reverse(r4revNewQualities.begin(), r4revNewQualities.end());
+                    //std::string r4revNewQualities(r4.qualityScores.data() + r4.originalLength, r4.qualityScores.size() - r4.originalLength);
+                    //std::reverse(r4revNewQualities.begin(), r4revNewQualities.end());
 
                     r1.extendedRead.insert(r1.extendedRead.begin(), r4revcNewPositions.begin(), r4revcNewPositions.end());
-                    r1.qualityScores.insert(r1.qualityScores.begin(), r4revNewQualities.begin(), r4revNewQualities.end());
+                    //r1.qualityScores.insert(r1.qualityScores.begin(), r4revNewQualities.begin(), r4revNewQualities.end());
 
                     r1.read1begin += r4revcNewPositions.size();
                     r1.read2begin += r4revcNewPositions.size();
@@ -2068,11 +2063,15 @@ private:
             auto r3matefoundfunc = [&](){
                 merge(r3,r4);
 
+                r3.read2Quality = std::move(r4.read1Quality);
+
                 int extlength = r3.extendedRead.size();
 
 
                 SequenceHelpers::reverseComplementSequenceDecodedInplace(r3.extendedRead.data(), extlength);
-                std::reverse(r3.qualityScores.begin(), r3.qualityScores.end());
+                std::reverse(r3.read1Quality.begin(), r3.read1Quality.end());
+                std::reverse(r3.read2Quality.begin(), r3.read2Quality.end());
+                std::swap(r3.read1Quality, r3.read2Quality);
 
                 //const int sizeOfGap = r3.read2begin - (r3.read1begin + r3.originalLength);
                 const int sizeOfRightExtension = extlength - (r3.read2begin + r3.originalMateLength);
@@ -2092,10 +2091,12 @@ private:
                 r3.originalLength = newread1length;
                 r3.originalMateLength = newread2length;
 
+
+
                 if(int(r2.extendedRead.size()) > r2.originalLength){
                     //insert extensions of r2 at end of r3
                     r3.extendedRead.insert(r3.extendedRead.end(), r2.extendedRead.begin() + r2.originalLength, r2.extendedRead.end());
-                    r3.qualityScores.insert(r3.qualityScores.end(), r2.qualityScores.begin() + r2.originalLength, r2.qualityScores.end());
+                    //r3.qualityScores.insert(r3.qualityScores.end(), r2.qualityScores.begin() + r2.originalLength, r2.qualityScores.end());
                 }
                 
                 r3.mergedFromReadsWithoutMate = false;
@@ -2103,6 +2104,21 @@ private:
                 if(&(*dest) != &r3){
                     *dest = std::move(r3);
                 }
+                ++dest;
+            };
+
+            auto discardExtensionFunc = [&](){
+                r1.extendedRead.erase(r1.extendedRead.begin() + r1.originalLength, r1.extendedRead.end());
+                r1.read2Quality.clear();
+                r1.read2begin = -1;
+                r1.mateHasBeenFound = false;
+                r1.aborted = false;
+                r1.mergedFromReadsWithoutMate = false;
+
+                if(&(*dest) != &r1){
+                    *dest = std::move(r1);
+                }
+                
                 ++dest;
             };
 
@@ -2126,9 +2142,8 @@ private:
                 r3matefoundfunc();                
             }else{
                 assert(int(r1.extendedRead.size()) >= r1.originalLength);
-                #if 0
-                r1.extendedRead.erase(r1.extendedRead.begin() + r1.originalLength, r1.extendedRead.end());
-                r1.mergedFromReadsWithoutMate = false;
+                #if 1
+                discardExtensionFunc();
                 #else
 
                 //try to find an overlap between r1 and r3 to create an extended read with proper length which reaches the mate
@@ -2209,15 +2224,16 @@ private:
                         r1.read2begin += r4revcNewPositions.size();
                     }
                 }
-
-                #endif
-
                 r1.mergedFromReadsWithoutMate = didMergeDifferentStrands;
 
                 if(&(*dest) != &r1){
                     *dest = std::move(r1);
                 }
                 ++dest;
+
+                #endif
+
+
             }
         }
 
@@ -2262,12 +2278,12 @@ private:
 
             auto overlapstart = l.read2begin;
             l.extendedRead.resize(overlapstart + r.extendedRead.size());
-            l.qualityScores.resize(overlapstart + r.extendedRead.size());
+            //l.qualityScores.resize(overlapstart + r.extendedRead.size());
 
-            assert(int(std::distance(r.qualityScores.begin() + r.originalLength, r.qualityScores.end())) <= int(l.qualityScores.size() - beginOfNewPositions));
+            //assert(int(std::distance(r.qualityScores.begin() + r.originalLength, r.qualityScores.end())) <= int(l.qualityScores.size() - beginOfNewPositions));
 
             std::copy(r.extendedRead.begin() + r.originalLength, r.extendedRead.end(), l.extendedRead.begin() + beginOfNewPositions);
-            std::copy(r.qualityScores.begin() + r.originalLength, r.qualityScores.end(), l.qualityScores.begin() + beginOfNewPositions);
+            //std::copy(r.qualityScores.begin() + r.originalLength, r.qualityScores.end(), l.qualityScores.begin() + beginOfNewPositions);
         };
 
         for(int i = 0; i < reads; i += 1){
@@ -2278,16 +2294,17 @@ private:
 
             auto r1matefoundfunc = [&](){
                 merge(r1,r2);
+                r1.read2Quality = std::move(r2.read1Quality);
 
                 if(int(r4.extendedRead.size()) > r4.originalLength){
                     //insert extensions of reverse complement of r4 at beginning of r1
 
                     std::string r4revcNewPositions = SequenceHelpers::reverseComplementSequenceDecoded(r4.extendedRead.data() + r4.originalLength, r4.extendedRead.size() - r4.originalLength);
-                    std::string r4revNewQualities(r4.qualityScores.data() + r4.originalLength, r4.qualityScores.size() - r4.originalLength);
-                    std::reverse(r4revNewQualities.begin(), r4revNewQualities.end());
+                    //std::string r4revNewQualities(r4.qualityScores.data() + r4.originalLength, r4.qualityScores.size() - r4.originalLength);
+                    //std::reverse(r4revNewQualities.begin(), r4revNewQualities.end());
 
                     r1.extendedRead.insert(r1.extendedRead.begin(), r4revcNewPositions.begin(), r4revcNewPositions.end());
-                    r1.qualityScores.insert(r1.qualityScores.begin(), r4revNewQualities.begin(), r4revNewQualities.end());
+                    //r1.qualityScores.insert(r1.qualityScores.begin(), r4revNewQualities.begin(), r4revNewQualities.end());
 
                     r1.read1begin += r4revcNewPositions.size();
                     r1.read2begin += r4revcNewPositions.size();
@@ -2305,12 +2322,12 @@ private:
 
             auto r3matefoundfunc = [&](){
                 merge(r3,r4);
-
+                r3.read2Quality = std::move(r4.read1Quality);
                 int extlength = r3.extendedRead.size();
 
 
                 SequenceHelpers::reverseComplementSequenceDecodedInplace(r3.extendedRead.data(), extlength);
-                std::reverse(r3.qualityScores.begin(), r3.qualityScores.end());
+                //std::reverse(r3.qualityScores.begin(), r3.qualityScores.end());
 
                 //const int sizeOfGap = r3.read2begin - (r3.read1begin + r3.originalLength);
                 const int sizeOfRightExtension = extlength - (r3.read2begin + r3.originalMateLength);
@@ -2333,7 +2350,7 @@ private:
                 if(int(r2.extendedRead.size()) > r2.originalLength){
                     //insert extensions of r2 at end of r3
                     r3.extendedRead.insert(r3.extendedRead.end(), r2.extendedRead.begin() + r2.originalLength, r2.extendedRead.end());
-                    r3.qualityScores.insert(r3.qualityScores.end(), r2.qualityScores.begin() + r2.originalLength, r2.qualityScores.end());
+                    //r3.qualityScores.insert(r3.qualityScores.end(), r2.qualityScores.begin() + r2.originalLength, r2.qualityScores.end());
                 }
                 
                 r3.mergedFromReadsWithoutMate = false;
@@ -2353,7 +2370,7 @@ private:
 
             auto discardExtensionFunc = [&](){
                 r1.extendedRead.erase(r1.extendedRead.begin() + r1.originalLength, r1.extendedRead.end());
-                r1.qualityScores.erase(r1.qualityScores.begin() + r1.originalLength, r1.qualityScores.end());
+                //r1.qualityScores.erase(r1.qualityScores.begin() + r1.originalLength, r1.qualityScores.end());
                 r1.read2begin = -1;
                 r1.mateHasBeenFound = false;
                 r1.aborted = false;
