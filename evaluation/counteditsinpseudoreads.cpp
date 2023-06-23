@@ -35,6 +35,9 @@
 #include <thrust/execution_policy.h>
 #endif 
 
+
+#define INCLUDE_LENGTH_DIFFERENCE_IN_EDIT_DISTANCE
+
 struct Read{
     std::string name{};
     std::string comment{};
@@ -1697,7 +1700,16 @@ struct Batch{
                         const int statisticsIndex = foundAfterRepetition ? indexReachedWithRepeat : indexReachedWithoutRepeat;
 
                         //editDistanceStatistics[statisticsIndex].addFullRead(extendedRead.size(), editsInFullRead);
+                        #ifdef INCLUDE_LENGTH_DIFFERENCE_IN_EDIT_DISTANCE
                         editDistanceStatistics[statisticsIndex].addGap(filledgapOfExtendedRead.size(), edFilled);
+
+                        #else
+
+                        const int lengthDiff = std::abs(int(filledgapOfExtendedRead.size()) - int(filledGapOfGenomeRegion.size()));
+                        const int edFilledNew = edFilled - lengthDiff;
+                        editDistanceStatistics[statisticsIndex].addGap(filledGapOfGenomeRegion.size(), edFilledNew);
+                        #endif
+
                         editDistanceStatistics[statisticsIndex].addOutside(extensionleftRead.size(), edLeft);
                         editDistanceStatistics[statisticsIndex].addOutside(extensionrightRead.size(), edRight);
 
@@ -2388,6 +2400,12 @@ int main(int argc, char** argv){
         std::cout << "Usage: " << argv[0] << " readlength genome.fasta genomeregions.fasta extendedreads.txt\n";
         return 1;
     }
+
+    #ifdef INCLUDE_LENGTH_DIFFERENCE_IN_EDIT_DISTANCE
+    std::cout << "Length difference of gap is included in total error rate\n";
+    #else
+    std::cout << "Length difference of gap is NOT included in total error rate\n";
+    #endif
 
     const int readLengthBeforeExtension = std::atoi(argv[1]);
 
