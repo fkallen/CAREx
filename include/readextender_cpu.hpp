@@ -1984,8 +1984,8 @@ private:
 
     std::vector<ExtendResult> combinePairedEndDirectionResults4(
         std::vector<ExtendResult>& pairedEndDirectionResults,
-        int minFragmentSize,
-        int maxFragmentSize
+        int /*minFragmentSize*/,
+        int /*maxFragmentSize*/
     ) const {
         auto idcomp = [](const auto& l, const auto& r){ return l.getReadPairId() < r.getReadPairId();};
         //auto lengthcomp = [](const auto& l, const auto& r){ return l.extendedRead.length() < r.extendedRead.length();};
@@ -2034,7 +2034,7 @@ private:
                 merge(r1,r2);
                 r1.read2Quality = std::move(r2.read1Quality);
 
-                std::cout << "r1matefoundfunc. read2quality = " << r1.read2Quality  << "\n";
+                //std::cout << "r1matefoundfunc. read2quality = " << r1.read2Quality  << "\n";
 
                 if(int(r4.extendedRead.size()) > r4.originalLength){
                     //insert extensions of reverse complement of r4 at beginning of r1
@@ -2245,8 +2245,8 @@ private:
 
     std::vector<ExtendResult> combinePairedEndDirectionResults4_strict(
         std::vector<ExtendResult>& pairedEndDirectionResults,
-        int minFragmentSize,
-        int maxFragmentSize,
+        int /*minFragmentSize*/,
+        int /*maxFragmentSize*/,
         MakePairResultsStrictConfig config
     ) const {
         auto idcomp = [](const auto& l, const auto& r){ return l.getReadPairId() < r.getReadPairId();};

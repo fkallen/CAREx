@@ -3585,7 +3585,7 @@ struct GpuReadExtender{
             gpuResult.goodscore = rawResults.h_gpugoodscores[srcindex];
             gpuResult.read2begin = read2begin;
             gpuResult.mateHasBeenFound = mateHasBeenFound;
-            gpuResult.extendedRead = std::string{gpuSeq, gpuLength};
+            gpuResult.extendedRead = std::string(gpuSeq, gpuLength);
             gpuResult.mergedFromReadsWithoutMate = mergedDifferentStrands;
 
             gpuResult.read1Quality = std::string{gpuQual + read1begin, gpuQual + read1begin + gpuResult.originalLength};
