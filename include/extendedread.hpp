@@ -433,6 +433,89 @@ namespace care{
     
     };
 
+    struct ExtendedReadView{
+    public:
+        bool mergedFromReadsWithoutMate = false;
+        ExtendedReadStatus status{};
+        read_number readId{};
+        int read1begin = 0;
+        int read1end = 0;
+        int read2begin = 0;
+        int read2end = 0;
+        
+    private:
+        int qual1len = 0;
+        int qual2len = 0;
+        std::string extendedSequence_raw{};
+        const char* qualityScores_read1_raw{};
+        const char* qualityScores_read2_raw{};
+
+    public:
+
+        ExtendedReadView() = default;
+        ExtendedReadView(const std::uint8_t* ptr){
+            operator=(ptr);
+        }
+
+        ExtendedReadView& operator=(const std::uint8_t* ptr){
+            std::memcpy(&readId, ptr, sizeof(read_number));
+            ptr += sizeof(read_number);
+
+            std::uint32_t encodedflags;
+            std::memcpy(&encodedflags, ptr, sizeof(std::uint32_t));
+            ptr += sizeof(read_number);
+
+            mergedFromReadsWithoutMate = bool(encodedflags >> 31);
+
+            auto loadint = [&](int& value){
+                std::memcpy(&value, ptr, sizeof(int)); ptr += sizeof(int);
+            };
+
+            std::memcpy(&status, ptr, sizeof(ExtendedReadStatus)); ptr += sizeof(ExtendedReadStatus); 
+
+            loadint(read1begin);
+            loadint(read1end);
+            loadint(read2begin);
+            loadint(read2end);
+            int seqlen;
+            loadint(seqlen);
+            loadint(qual1len);
+            loadint(qual2len);
+
+            extendedSequence_raw.resize(seqlen);
+
+            const int numEncodedSequenceInts = SequenceHelpers::getEncodedNumInts2Bit(seqlen);
+
+            SequenceHelpers::decode2BitSequence(extendedSequence_raw.data(), reinterpret_cast<const unsigned int*>(ptr), seqlen);
+            ptr += sizeof(unsigned int) * numEncodedSequenceInts;
+
+            qualityScores_read1_raw = reinterpret_cast<const char*>(ptr);           
+            ptr += sizeof(char) * qual1len;
+
+            qualityScores_read2_raw = reinterpret_cast<const char*>(ptr);
+            ptr += sizeof(char) * qual2len;
+
+            return *this;
+        }
+
+        read_number getReadId() const noexcept{
+            return readId;
+        }
+        
+        std::string_view getSequence() const noexcept{
+            return extendedSequence_raw;
+        }
+
+        std::string_view getRead1Quality() const noexcept{
+            return std::string_view(qualityScores_read1_raw, qual1len);
+        }
+
+        std::string_view getRead2Quality() const noexcept{
+            return std::string_view(qualityScores_read2_raw, qual2len);
+        }
+    
+    };
+
 }
 
 

@@ -86,6 +86,71 @@ namespace care{
         return res;
     }
 
+    template<class ExtendedRead>
+    void makeOutputReadFromExtendedRead(Read& res, const ExtendedRead& extendedRead, FileFormat outputFormat, const ProgramOptions& programOptions){
+        constexpr unsigned char foundMateStatus = static_cast<unsigned char>(ExtendedReadStatus::FoundMate);
+        constexpr unsigned char repeatedStatus = static_cast<unsigned char>(ExtendedReadStatus::Repeated);
+        unsigned char status = static_cast<unsigned char>(extendedRead.status);
+        const bool foundMate = (status & foundMateStatus) == foundMateStatus;
+        const bool repeated = (status & repeatedStatus) == repeatedStatus;
+
+        std::stringstream sstream;
+        sstream << extendedRead.readId;
+        sstream << ' ' << (foundMate ? "reached:1" : "reached:0");
+        sstream << ' ' << (extendedRead.mergedFromReadsWithoutMate ? "m:1" : "m:0");
+        sstream << ' ' << (repeated ? "a:1" : "a:0");
+        sstream << ' ';
+        sstream << "lens:" << extendedRead.read1begin << ',' << extendedRead.read1end << ',' << extendedRead.read2begin << ',' << extendedRead.read2end;
+        // if(extendedRead.status == ExtendedReadStatus::LengthAbort){
+        //     sstream << "exceeded_length";
+        // }else if(extendedRead.status == ExtendedReadStatus::CandidateAbort){
+        //     sstream << "0_candidates";
+        // }else if(extendedRead.status == ExtendedReadStatus::MSANoExtension){
+        //     sstream << "msa_stop";
+        // }
+
+        res.header = sstream.str();
+        res.sequence = extendedRead.getSequence();
+
+        const char pseudoreadqual = programOptions.gapQualityCharacter;
+
+        if(outputFormat == FileFormat::FASTQ || outputFormat == FileFormat::FASTQGZ){
+            res.quality.resize(res.sequence.length());
+            //fill left outward extension
+            std::fill(
+                res.quality.begin(), 
+                res.quality.begin() + extendedRead.read1begin, 
+                pseudoreadqual
+            );
+            //copy read1 quality
+            auto it = std::copy(
+                extendedRead.getRead1Quality().begin(), 
+                extendedRead.getRead1Quality().end(),
+                res.quality.begin() + extendedRead.read1begin
+            );
+            if(extendedRead.read2begin != -1){
+                //fill gap
+                std::fill(
+                    it, 
+                    res.quality.begin() + extendedRead.read2begin, 
+                    pseudoreadqual
+                );
+                //copy read2 quality
+                it = std::copy(
+                    extendedRead.getRead2Quality().begin(), 
+                    extendedRead.getRead2Quality().end(),
+                    res.quality.begin() + extendedRead.read2begin
+                );
+            }
+            //fill remainder
+            std::fill(
+                it, 
+                res.quality.end(), 
+                pseudoreadqual
+            );
+        }
+    }
+
 
 
 void writeExtensionResultsToFile(
@@ -94,6 +159,7 @@ void writeExtensionResultsToFile(
     const std::string& outputfile,
     const ProgramOptions& programOptions
 ){
+    helpers::CpuTimer mergetimer("Writing extended reads to file");
 
     std::unique_ptr<SequenceFileWriter> writer = makeSequenceWriter(
         //fileOptions.outputdirectory + "/extensionresult.txt", 
@@ -109,10 +175,14 @@ void writeExtensionResultsToFile(
     const int expectedNumber = partialResults.size();
     int actualNumber = 0;
 
+    Read resultRead;
+    ExtendedRead extendedRead;
+
+    ExtendedReadView extendedReadView;
+
     for(std::size_t itemnumber = 0; itemnumber < partialResults.size(); itemnumber++){
         const std::uint8_t* serializedPtr = partialResults.getPointer(itemnumber);
 
-        ExtendedRead extendedRead;
 
         #if 0
         extendedRead.copyFromContiguousMemory(serializedPtr);
@@ -122,15 +192,17 @@ void writeExtensionResultsToFile(
         extendedRead.decode(encext);
         #endif
 
+        //extendedReadView = serializedPtr;
+
         constexpr unsigned char foundMateStatus = static_cast<unsigned char>(ExtendedReadStatus::FoundMate);
         constexpr unsigned char repeatedStatus = static_cast<unsigned char>(ExtendedReadStatus::Repeated);
         unsigned char status = static_cast<unsigned char>(extendedRead.status);
         const bool foundMate = (status & foundMateStatus) == foundMateStatus;
         const bool repeated = (status & repeatedStatus) == repeatedStatus;
 
-        Read res = makeOutputReadFromExtendedRead(extendedRead, outputFormat, programOptions);
+        makeOutputReadFromExtendedRead(resultRead, extendedRead, outputFormat, programOptions);
 
-        writer->writeRead(res.header, res.sequence, res.quality);
+        writer->writeRead(resultRead.header, resultRead.sequence, resultRead.quality);
 
         //statusHistogram[extendedRead.status]++;
         if(foundMate){
@@ -161,6 +233,8 @@ void writeExtensionResultsToFile(
     //         default: break;
     //     }
     // }
+
+    mergetimer.print();
 }
 
 
