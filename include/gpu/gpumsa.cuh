@@ -86,26 +86,6 @@ namespace gpu{
             }
             printf("%d - %d, first %d, last %d, anchor %d\n", 
                 printbegin, printend, columnProperties->firstColumn_incl, columnProperties->lastColumn_excl, columnProperties->anchorColumnsBegin_incl);
-            // printf("Weights A:\n");
-            // for(int i = printbegin; i < printend; i++){
-            //     printf("%.7f ", weights[0 * columnPitchInElements + i]);
-            // }
-            // printf("\n");
-            // printf("Weights C:\n");
-            // for(int i = printbegin; i < printend; i++){
-            //     printf("%.7f ", weights[1 * columnPitchInElements + i]);
-            // }
-            // printf("\n");
-            // printf("Weights G:\n");
-            // for(int i = printbegin; i < printend; i++){
-            //     printf("%.7f ", weights[2 * columnPitchInElements + i]);
-            // }
-            // printf("\n");
-            // printf("Weights T:\n");
-            // for(int i = printbegin; i < printend; i++){
-            //     printf("%.7f ", weights[3 * columnPitchInElements + i]);
-            // }
-            // printf("\n");
             printf("Weights A:\n");
             for(int i = printbegin; i < printend; i++){
                 unsigned int u; memcpy(&u, &weights[0 * columnPitchInElements + i], sizeof(unsigned int));
@@ -418,6 +398,8 @@ namespace gpu{
             const int lastColumn_excl = columnProperties->lastColumn_excl;
             const int numColumnsToCheck = lastColumn_excl - firstColumn_incl;
 
+            group.sync();
+
             int newFirstColumn_incl = -1;
             int newLastColumn_excl = -1;
 
@@ -441,9 +423,6 @@ namespace gpu{
                     newLastColumn_excl = column+1;
                 }
             }
-
-            //avoid race-condition on columnProperties
-            group.sync();
 
             //there can be at most one thread for which this is true
             if(newFirstColumn_incl != -1){
