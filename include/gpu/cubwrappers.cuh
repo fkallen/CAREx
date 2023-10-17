@@ -1,8 +1,6 @@
 #ifndef MY_CUB_WRAPPERS_CUH
 #define MY_CUB_WRAPPERS_CUH
 
-#include <gpu/cubvector.cuh>
-
 #include <cub/cub.cuh>
 #include <rmm/mr/device/device_memory_resource.hpp>
 #include <rmm/mr/device/per_device_resource.hpp>
@@ -27,8 +25,7 @@ namespace care{
             InputIteratorT d_in,
             OutputIteratorT d_out,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -39,8 +36,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -52,8 +48,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -65,8 +60,7 @@ namespace care{
             InputIteratorT d_in,
             OutputIteratorT d_out,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -77,8 +71,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -90,8 +83,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -104,8 +96,7 @@ namespace care{
             OutputIteratorT d_out,
             ScanOpT scan_op,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -117,8 +108,7 @@ namespace care{
                 d_out, 
                 scan_op, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -131,8 +121,7 @@ namespace care{
                 d_out, 
                 scan_op, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -144,8 +133,7 @@ namespace care{
             InputIteratorT d_in,
             OutputIteratorT d_out,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -156,8 +144,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -169,8 +156,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -182,8 +168,7 @@ namespace care{
             InputIteratorT d_in,
             OutputIteratorT d_out,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -194,8 +179,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -207,8 +191,7 @@ namespace care{
                 d_in, 
                 d_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -222,8 +205,7 @@ namespace care{
             OutputIteratorT d_out,
             NumSelectedIteratorT d_num_selected_out,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -236,8 +218,7 @@ namespace care{
                 d_out, 
                 d_num_selected_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -251,8 +232,7 @@ namespace care{
                 d_out, 
                 d_num_selected_out, 
                 num_items, 
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -266,8 +246,7 @@ namespace care{
             int num_segments,
             OffsetIteratorT	d_begin_offsets,
             OffsetIteratorT d_end_offsets,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -280,8 +259,7 @@ namespace care{
                 num_segments, 
                 d_begin_offsets, 
                 d_end_offsets,
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -295,8 +273,7 @@ namespace care{
                 num_segments, 
                 d_begin_offsets, 
                 d_end_offsets,
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -312,8 +289,7 @@ namespace care{
             NumRunsOutputIteratorT d_num_runs_out,
             ReductionOpT reduction_op,
             int num_items,
-            cudaStream_t stream = 0,
-            bool debug_synchronous = false 
+            cudaStream_t stream = 0
         ) const {
             std::size_t bytes = 0;
             cudaError_t status = cudaSuccess;
@@ -328,8 +304,7 @@ namespace care{
                 d_num_runs_out,
                 reduction_op,
                 num_items,
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 
@@ -345,8 +320,7 @@ namespace care{
                 d_num_runs_out,
                 reduction_op,
                 num_items,
-                stream,
-                debug_synchronous
+                stream
             );
             assert(status == cudaSuccess);
 

@@ -11,7 +11,6 @@
 #include <gpu/kernels.hpp>
 #include <gpu/gpuminhasher.cuh>
 #include <gpu/segmented_set_operations.cuh>
-#include <gpu/cachingallocator.cuh>
 #include <gpu/util_gpu.cuh>
 #include <sequencehelpers.hpp>
 #include <hostdevicefunctions.cuh>
@@ -21,7 +20,6 @@
 #include <readextender_cpu.hpp>
 #include <util_iterator.hpp>
 #include <readextender_common.hpp>
-#include <gpu/cubvector.cuh>
 #include <gpu/cuda_block_select.cuh>
 #include <mystringview.hpp>
 #include <gpu/gpustringglueing.cuh>

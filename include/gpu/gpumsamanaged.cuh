@@ -2,7 +2,6 @@
 #define CARE_GPU_MSA_MANAGED_CUH
 
 #include <gpu/gpumsa.cuh>
-#include <gpu/cubvector.cuh>
 #include <gpu/kernels.hpp>
 #include <hpc_helpers.cuh>
 #include <gpu/cudaerrorcheck.cuh>
