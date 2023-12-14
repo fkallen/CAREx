@@ -408,7 +408,7 @@ struct GpuReadExtender{
             #endif
         }
 
-        TaskData(rmm::mr::device_memory_resource* mr_) : TaskData(mr_, 0,0,0,0, (cudaStream_t)0) {}
+        TaskData(rmm::mr::device_memory_resource* mr_) : TaskData(mr_, 0,0,0,0,0, (cudaStream_t)0) {}
 
         TaskData(
             rmm::mr::device_memory_resource* mr_, 
@@ -416,11 +416,13 @@ struct GpuReadExtender{
             std::size_t encodedSequencePitchInInts_, 
             std::size_t decodedSequencePitchInBytes_, 
             std::size_t qualityPitchInBytes_,
+            std::size_t extendedSequencePitchInBytes_,
             cudaStream_t stream
-        ) //TODO extendedSequencesPitch
+        )
             : encodedSequencePitchInInts(encodedSequencePitchInInts_), 
                 decodedSequencePitchInBytes(decodedSequencePitchInBytes_), 
                 qualityPitchInBytes(qualityPitchInBytes_),
+                extendedSequencePitchInBytes(extendedSequencePitchInBytes_),
                 mr(mr_),
                 pairedEnd{0, stream, mr},
                 mateHasBeenFound{0, stream, mr},
@@ -717,7 +719,15 @@ struct GpuReadExtender{
 
             const int numAdditionalTasks = 4 * numReadPairs;
 
-            TaskData newGpuSoaTaskData(mr, numAdditionalTasks, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
+            TaskData newGpuSoaTaskData(
+                mr, 
+                numAdditionalTasks, 
+                encodedSequencePitchInInts, 
+                decodedSequencePitchInBytes, 
+                qualityPitchInBytes, 
+                extendedSequencePitchInBytes,
+                stream
+            );
             readextendergpukernels::createGpuTaskData<128,8>
                 <<<SDIV(numAdditionalTasks, (128 / 8)), 128, 0, stream>>>(
                 numReadPairs,
@@ -1182,7 +1192,15 @@ struct GpuReadExtender{
 
             auto gathersize = thrust::distance(d_mapBegin, d_mapEnd);
 
-            TaskData selection(mr, gathersize, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
+            TaskData selection(
+                mr, 
+                gathersize, 
+                encodedSequencePitchInInts, 
+                decodedSequencePitchInBytes, 
+                qualityPitchInBytes, 
+                extendedSequencePitchInBytes,
+                stream
+            );
 
             
             auto inputScalars1Begin = thrust::make_zip_iterator(thrust::make_tuple(
@@ -2867,6 +2885,10 @@ struct GpuReadExtender{
         // }
       
         //compute extensions
+
+        // std::cout << "tasks->extendedSequencePitchInBytes = " << tasks->extendedSequencePitchInBytes << "\n";
+        // std::cout << "tasks->size() = " << tasks->size() << "\n";
+        // std::cout << "tasks->extendedSequences.size() = " << tasks->extendedSequences.size() << "\n";
 
         readextendergpukernels::computeExtensionStepFromMsaKernel_new<128><<<tasks->size(), 128, 0, stream>>>(
             programOptions->minFragmentSize,

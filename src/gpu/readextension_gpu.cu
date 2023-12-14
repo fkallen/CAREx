@@ -193,6 +193,7 @@ struct ExtensionPipeline{
     std::size_t encodedSequencePitchInInts;
     std::size_t decodedSequencePitchInBytes;
     std::size_t qualityPitchInBytes;
+    std::size_t extendedSequencePitchInBytes;
     std::size_t msaColumnPitchInElements;
     SubmitReadyExtensionResultsCallback submitReadyResults;
     ProgressThread<read_number>* progressThread;
@@ -206,6 +207,7 @@ struct ExtensionPipeline{
         std::size_t encodedSequencePitchInInts_,
         std::size_t decodedSequencePitchInBytes_,
         std::size_t qualityPitchInBytes_,
+        std::size_t extendedSequencePitchInBytes_, 
         std::size_t msaColumnPitchInElements_,
         SubmitReadyExtensionResultsCallback submitReadyResults_,
         ProgressThread<read_number>* progressThread_
@@ -216,6 +218,7 @@ struct ExtensionPipeline{
         encodedSequencePitchInInts(encodedSequencePitchInInts_),
         decodedSequencePitchInBytes(decodedSequencePitchInBytes_),
         qualityPitchInBytes(qualityPitchInBytes_),
+        extendedSequencePitchInBytes(extendedSequencePitchInBytes_),
         msaColumnPitchInElements(msaColumnPitchInElements_),
         submitReadyResults(submitReadyResults_),
         progressThread(progressThread_)
@@ -242,8 +245,8 @@ struct ExtensionPipeline{
         const int maxNumThreads = std::min(programOptions.threads, programOptions.gpuExtenderThreadConfig.numExtenders);
         const int numDevices = programOptions.deviceIds.size();
 
-        std::cerr << "First Pass\n";
-        std::cerr << "use " << maxNumThreads << " threads\n";
+        // std::cerr << "First Pass\n";
+        // std::cerr << "use " << maxNumThreads << " threads\n";
 
         std::vector<std::future<std::vector<read_number>>> futures;
         for(int t = 0; t < maxNumThreads; t++){
@@ -374,8 +377,24 @@ struct ExtensionPipeline{
 
         GpuReadExtender::Hasher anchorHasher(minhasher, mr);
 
-        GpuReadExtender::TaskData tasks(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
-        GpuReadExtender::TaskData finishedTasks(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
+        GpuReadExtender::TaskData tasks(
+            mr, 
+            0, 
+            encodedSequencePitchInInts, 
+            decodedSequencePitchInBytes, 
+            qualityPitchInBytes, 
+            extendedSequencePitchInBytes, 
+            stream
+        );
+        GpuReadExtender::TaskData finishedTasks(
+            mr, 
+            0, 
+            encodedSequencePitchInInts, 
+            decodedSequencePitchInBytes, 
+            qualityPitchInBytes, 
+            extendedSequencePitchInBytes, 
+            stream
+        );
 
         GpuReadExtender::AnchorData anchorData(stream, mr);
         GpuReadExtender::AnchorHashResult anchorHashResult(stream, mr);
@@ -549,6 +568,7 @@ struct ExtensionPipelineProducerConsumer{
     std::size_t encodedSequencePitchInInts;
     std::size_t decodedSequencePitchInBytes;
     std::size_t qualityPitchInBytes;
+    std::size_t extendedSequencePitchInBytes;
     std::size_t msaColumnPitchInElements;
     SubmitReadyExtensionResultsCallback submitReadyResults;
     ProgressThread<read_number>* progressThread;
@@ -593,6 +613,7 @@ struct ExtensionPipelineProducerConsumer{
         std::size_t encodedSequencePitchInInts_,
         std::size_t decodedSequencePitchInBytes_,
         std::size_t qualityPitchInBytes_,
+        std::size_t extendedSequencePitchInBytes_,
         std::size_t msaColumnPitchInElements_,
         SubmitReadyExtensionResultsCallback submitReadyResults_,
         ProgressThread<read_number>* progressThread_
@@ -603,6 +624,7 @@ struct ExtensionPipelineProducerConsumer{
         encodedSequencePitchInInts(encodedSequencePitchInInts_),
         decodedSequencePitchInBytes(decodedSequencePitchInBytes_),
         qualityPitchInBytes(qualityPitchInBytes_),
+        extendedSequencePitchInBytes(extendedSequencePitchInBytes_),
         msaColumnPitchInElements(msaColumnPitchInElements_),
         submitReadyResults(submitReadyResults_),
         progressThread(progressThread_)
@@ -662,8 +684,24 @@ struct ExtensionPipelineProducerConsumer{
 
         for(int i = 0; i < numTaskBatches; i++){
             taskStreams.emplace_back();
-            taskDataVec.emplace_back(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
-            finishedTaskDataVec.emplace_back(mr, 0, encodedSequencePitchInInts, decodedSequencePitchInBytes, qualityPitchInBytes, stream);
+            taskDataVec.emplace_back(
+                mr, 
+                0, 
+                encodedSequencePitchInInts, 
+                decodedSequencePitchInBytes, 
+                qualityPitchInBytes, 
+                extendedSequencePitchInBytes, 
+                stream
+            );
+            finishedTaskDataVec.emplace_back(
+                mr, 
+                0, 
+                encodedSequencePitchInInts, 
+                decodedSequencePitchInBytes, 
+                qualityPitchInBytes, 
+                extendedSequencePitchInBytes, 
+                stream
+            );
             anchorDataVec.emplace_back(stream, mr);
             anchorHashResultVec.emplace_back(stream, mr);            
         }
@@ -1210,6 +1248,8 @@ void extend_gpu_pairedend(
     const std::size_t encodedSequencePitchInInts = SequenceHelpers::getEncodedNumInts2Bit(maximumSequenceLength);
     const std::size_t decodedSequencePitchInBytes = SDIV(maximumSequenceLength, 128) * 128;
     const std::size_t qualityPitchInBytes = SDIV(maximumSequenceLength, 128) * 128;
+    //extended sequences must be padded to 16 bytes
+    const std::size_t extendedSequencePitchInBytes = SDIV(programOptions.maxFragmentSize, 16) * 16;
 
     const std::size_t min_overlap = std::max(
         1, 
@@ -1235,6 +1275,7 @@ void extend_gpu_pairedend(
             encodedSequencePitchInInts,
             decodedSequencePitchInBytes,
             qualityPitchInBytes,
+            extendedSequencePitchInBytes,
             msaColumnPitchInElements,
             submitReadyResults,
             &progressThread
@@ -1256,6 +1297,7 @@ void extend_gpu_pairedend(
             encodedSequencePitchInInts,
             decodedSequencePitchInBytes,
             qualityPitchInBytes,
+            extendedSequencePitchInBytes,
             msaColumnPitchInElements,
             submitReadyResults,
             &progressThread

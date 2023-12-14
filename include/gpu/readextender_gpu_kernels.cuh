@@ -1620,8 +1620,11 @@ namespace readextendergpukernels{
                     consensusLength - anchorLength, 
                     std::max(0, fixedStepsize)
                 );
-                //cannot extend over fragment 
-                extendBy = std::min(extendBy, (maxFragmentSize - mateLength) - accumExtensionsLength);
+
+                //cannot extend over fragment
+                const int maxExtendBy_forFragmentSize = maxFragmentSize - currentExtensionLength;
+                const int maxExtendBy_toReachMate = (maxFragmentSize - mateLength) - accumExtensionsLength;
+                extendBy = std::min(extendBy, std::min(maxExtendBy_forFragmentSize, maxExtendBy_toReachMate));
 
 
 
@@ -1646,7 +1649,7 @@ namespace readextendergpukernels{
 
                 if(fixedStepsize <= 0){
                     extendBy = myPos - anchorLength;
-                    extendBy = std::min(extendBy, (maxFragmentSize - mateLength) - accumExtensionsLength);
+                    extendBy = std::min(extendBy, std::min(maxExtendBy_forFragmentSize, maxExtendBy_toReachMate));
                 }
 
                 //if(threadIdx.x == 0) printf("t %d, extendBy %d, currentExtensionLength %d\n", t, extendBy, currentExtensionLength);

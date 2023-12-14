@@ -68,7 +68,7 @@ public:
     }
 
     std::vector<ExtendResult> extend(const std::vector<ExtendInput>& inputs, bool doExtraHash){
-        auto tasks = makePairedEndTasksFromInput4(inputs.begin(), inputs.end());
+        auto tasks = makePairedEndTasksFromInput4(inputs.begin(), inputs.end(), programOptions.maxFragmentSize);
         
         auto extendedTasks = processPairedEndTasks(tasks, doExtraHash);
 
@@ -1625,7 +1625,9 @@ private:
             std::max(0, maxextensionPerStep)
         );
         //cannot extend over fragment 
-        extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - accumExtensionsLength);
+        const int maxExtendBy_forFragmentSize = programOptions.maxFragmentSize - currentExtensionLength;
+        const int maxExtendBy_toReachMate = (programOptions.maxFragmentSize - mateLength) - accumExtensionsLength;
+        extendBy = std::min(extendBy, std::min(maxExtendBy_forFragmentSize, maxExtendBy_toReachMate));
 
         if(maxextensionPerStep <= 0){
 
@@ -1638,7 +1640,7 @@ private:
             );
 
             extendBy = std::distance(msa.coverage.begin() + anchorLength, iter);
-            extendBy = std::min(extendBy, (programOptions.maxFragmentSize - mateLength) - accumExtensionsLength);
+            extendBy = std::min(extendBy, std::min(maxExtendBy_forFragmentSize, maxExtendBy_toReachMate));
         }
 
         auto makeAnchorForNextIteration = [&](){            

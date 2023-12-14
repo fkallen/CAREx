@@ -4,6 +4,7 @@
 #include <stringglueing.hpp>
 #include <hostdevicefunctions.cuh>
 #include <extendedread.hpp>
+#include <options.hpp>
 
 #include <cassert>
 
@@ -370,13 +371,18 @@ namespace care{
 
 
     template<class InputIter, class TaskOutIter>
-    TaskOutIter makePairedEndTasksFromInput4(InputIter inputsBegin, InputIter inputsEnd, TaskOutIter outputBegin){
+    TaskOutIter makePairedEndTasksFromInput4(
+        InputIter inputsBegin, 
+        InputIter inputsEnd, 
+        TaskOutIter outputBegin,
+        std::size_t extendedSequencePitch
+    ){
         TaskOutIter cur = outputBegin;
 
         std::for_each(
             inputsBegin, 
             inputsEnd,
-            [&cur](auto&& input){
+            [&](auto&& input){
                 /*
                     5-3 input.encodedRead1 --->
                     3-5                           <--- input.encodedRead2
@@ -395,7 +401,6 @@ namespace care{
                 std::string dec2_53 = SequenceHelpers::get2BitString(enc2_53.data(), input.readLength2);
                 std::string dec2_35 = SequenceHelpers::get2BitString(enc2_35.data(), input.readLength2);
 
-                constexpr std::size_t extendedSequencePitch = 2048;
                 //task1, extend encodedRead1 to the right on 5-3 strand
                 auto& task1 = *cur;
                 task1.reset();
@@ -534,12 +539,12 @@ namespace care{
     }
 
     template<class InputIter>
-    std::vector<Task> makePairedEndTasksFromInput4(InputIter inputsBegin, InputIter inputsEnd){
+    std::vector<Task> makePairedEndTasksFromInput4(InputIter inputsBegin, InputIter inputsEnd, std::size_t extendedSequencePitch){
         auto num = std::distance(inputsBegin, inputsEnd);
 
         std::vector<Task> vec(num * 4);
 
-        auto endIter = makePairedEndTasksFromInput4(inputsBegin, inputsEnd, vec.begin());
+        auto endIter = makePairedEndTasksFromInput4(inputsBegin, inputsEnd, vec.begin(), extendedSequencePitch);
         if(endIter != vec.end())
             throw std::runtime_error("Error initializing batch");
 
