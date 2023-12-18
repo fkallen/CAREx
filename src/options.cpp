@@ -27,6 +27,8 @@ namespace care{
             return "SingleEnd";
         case SequencePairType::PairedEnd:
             return "PairedEnd";
+        case SequencePairType::MatePair:
+            return "MatePair";
         default:
             return "Error";
         }
@@ -286,17 +288,19 @@ namespace care{
 		    result.outputdirectory = pr["outdir"].as<std::string>();
         }
 
-        // if(pr.count("pairmode")){
-        //     const std::string arg = pr["pairmode"].as<std::string>();
+        if(pr.count("pairmode")){
+            const std::string arg = pr["pairmode"].as<std::string>();
 
-        //     if(arg == "se" || arg == "SE"){
-        //         result.pairType = SequencePairType::SingleEnd;
-        //     }else if(arg == "pe" || arg == "PE"){
-        //         result.pairType = SequencePairType::PairedEnd;
-        //     }else{
-        //         result.pairType = SequencePairType::Invalid;
-        //     }
-        // }  
+            if(arg == "se" || arg == "SE"){
+                result.pairType = SequencePairType::SingleEnd;
+            }else if(arg == "pe" || arg == "PE"){
+                result.pairType = SequencePairType::PairedEnd;
+            }else if(arg == "mp" || arg == "MP"){
+                result.pairType = SequencePairType::MatePair;
+            }else{
+                result.pairType = SequencePairType::Invalid;
+            }
+        }  
 
 
         if(pr.count("save-preprocessedreads-to")){
@@ -460,7 +464,8 @@ namespace care{
         }
 
         {
-            assert(opt.pairType == SequencePairType::PairedEnd); //single end extension not implemented
+             //single end extension not implemented
+            assert(opt.pairType == SequencePairType::PairedEnd || opt.pairType == SequencePairType::MatePair);
 
             //Disallow invalid type
             if(opt.pairType == SequencePairType::Invalid){
@@ -474,6 +479,14 @@ namespace care{
                 if(!countOk){
                     valid = false;
                     std::cout << "Error: Invalid number of input files for selected pairmode 'PairedEnd'." << std::endl;
+                }
+            }
+            //In mate pair mode, there must be a single input file with interleaved reads, or exactly two input files, one per direction.
+            if(opt.pairType == SequencePairType::MatePair){
+                const int countOk = opt.inputfiles.size() == 1 || opt.inputfiles.size() == 2;
+                if(!countOk){
+                    valid = false;
+                    std::cout << "Error: Invalid number of input files for selected pairmode 'MatePair'." << std::endl;
                 }
             }
 
@@ -550,6 +563,7 @@ namespace care{
         stream << "Hashtable load factor: " << hashtableLoadfactor << "\n";
         stream << "Fixed number of reads: " << fixedNumberOfReads << "\n";   
         stream << "Gap quality character: " << gapQualityCharacter << "\n"; 
+        stream << "Paired mode: " << to_string(pairType) << "\n";
     }
 
     void ProgramOptions::printAdditionalOptionsExtend(std::ostream& stream) const{
@@ -694,7 +708,16 @@ namespace care{
             ("hashloadfactor", "Load factor of hashtables. 0.0 < hashloadfactor < 1.0. Smaller values can improve the runtime at the expense of greater memory usage."
                 "Default: " + std::to_string(ProgramOptions{}.hashtableLoadfactor), cxxopts::value<float>())
             ("fixedNumberOfReads", "Process only the first n reads. Default: " + tostring(ProgramOptions{}.fixedNumberOfReads), cxxopts::value<std::size_t>())
-            ("gapQualityCharacter", "Quality score to output for extended nucleotides. Default: " + tostring(ProgramOptions{}.gapQualityCharacter), cxxopts::value<std::size_t>()); 
+            ("gapQualityCharacter", "Quality score to output for extended nucleotides. Default: " + tostring(ProgramOptions{}.gapQualityCharacter), cxxopts::value<std::size_t>())
+
+            ("pairmode", 
+                "Type of input reads."
+                "SE / se : Single-end reads. "
+                "PE / pe : Paired-end reads in forward-reverse orientation. "
+                "MP / mp : Mate-Pair reads in reverse-forward orientation. Program will reverse complement each read",
+                cxxopts::value<std::string>())
+
+            ; //option end
 
             
     }

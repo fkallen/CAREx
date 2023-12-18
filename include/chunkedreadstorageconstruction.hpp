@@ -32,8 +32,13 @@ std::unique_ptr<ChunkedReadStorage> constructChunkedReadStorageFromFiles(
     const bool useQualityScores = programOptions.useQualityScores;
     const int numQualityBits = programOptions.qualityScoreBits;
 
+    auto isPairedEndOrMatePair = [&](){
+        return programOptions.pairType == SequencePairType::PairedEnd
+            || programOptions.pairType == SequencePairType::MatePair;
+    };
+
     if(programOptions.load_binary_reads_from != ""){
-        const bool pairedEnd = programOptions.pairType == SequencePairType::PairedEnd;
+        const bool pairedEnd = isPairedEndOrMatePair();
         std::unique_ptr<ChunkedReadStorage> readStorage = std::make_unique<ChunkedReadStorage>(pairedEnd, useQualityScores, numQualityBits);
 
         readStorage->loadFromFile(programOptions.load_binary_reads_from);
@@ -41,7 +46,7 @@ std::unique_ptr<ChunkedReadStorage> constructChunkedReadStorageFromFiles(
 
         return readStorage;
     }else{
-        const bool pairedEnd = programOptions.pairType == SequencePairType::PairedEnd;
+        const bool pairedEnd = isPairedEndOrMatePair();
         std::unique_ptr<ChunkedReadStorage> readStorage = std::make_unique<ChunkedReadStorage>(pairedEnd, useQualityScores, numQualityBits);
 
         const bool showProgress = programOptions.showProgress;
@@ -89,6 +94,13 @@ std::unique_ptr<ChunkedReadStorage> constructChunkedReadStorageFromFiles(
             }
 
             return numundeterminedBasesInSequence > 0;
+        };
+
+        auto fixOrientationForMatePair = [&](std::string& sequence, std::string& qualities){            
+            SequenceHelpers::reverseComplementSequenceDecodedInplace(sequence.data(), sequence.size());
+            if(useQualityScores){
+                std::reverse(qualities.begin(), qualities.end());
+            }
         };
 
 
@@ -273,6 +285,10 @@ std::unique_ptr<ChunkedReadStorage> constructChunkedReadStorageFromFiles(
                     const int length = sbatch->sequences[i].length();
                     encbatch->sequenceLengths[i] = length;
 
+                    if(programOptions.pairType == SequencePairType::MatePair){
+                        fixOrientationForMatePair(sbatch->sequences[i], sbatch->qualities[i]);
+                    }
+
                     bool isAmbig = preprocessSequence(sbatch->sequences[i], Ncount);
                     if(isAmbig){
                         const read_number readId = sbatch->firstReadId + i;
@@ -395,8 +411,8 @@ std::unique_ptr<ChunkedReadStorage> constructChunkedReadStorageFromFiles(
                 totalNumReads += numReads;
             }
 
-        }else if(programOptions.pairType == SequencePairType::PairedEnd){
-            //paired end may be one of the following. 1 file with interleaved reads,
+        }else if(isPairedEndOrMatePair()){
+            //may be one of the following. 1 file with interleaved reads,
             //or two files with separate reads
 
             const int numInputFiles = programOptions.inputfiles.size();

@@ -18,6 +18,7 @@ namespace care
         Invalid,
         SingleEnd,
         PairedEnd,
+        MatePair,
     };
 
     enum class GpuDataLayout{
