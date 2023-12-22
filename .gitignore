@@ -11,3 +11,6 @@ evaluation/countgapeditsfromsam
 evaluation/konnectoraddmateinfo
 evaluation/makepairregionbed
 evaluation/reorderReadsByFai
+evaluation/filterBySimpleRepeat
+evaluation/markRepeatsInReadRegions
+evaluation/reversecomplementfastq
