@@ -24,7 +24,7 @@ make -j $threads cpu
 
 #make -j $threads gpu
 #./carex-gpu -i $input_1 -i $input_2 -c 30 -d $outputdir --minFragmentSize 280 --maxFragmentSize 320 -t $threads -p -q -m $memorylimit -g 0 \
-    --eo $output_extended --outputRemaining --ro $output_remaining
+#    --eo $output_extended --outputRemaining --ro $output_remaining
 
 
 

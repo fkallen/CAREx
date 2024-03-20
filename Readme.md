@@ -68,6 +68,11 @@ A more advanced usage could look like the following command. It enables progress
 ./carex-cpu -i interleaved_paired_reads.fq -c 10 -d outputdir --minFragmentSize 280 --maxFragmentSize 320 -p -q --excludeAmbiguous -m 22G -t 16 -k 20 -h 32 
 ```
 
+One of our benchmark datasets can be downloaded (3 gigabyte) and extended by executing the example script: 
+```
+bash example.sh
+```
+
 # GPU execution
 The equivalent execution of the previous CPU command with the GPU version using the first GPU (gpu id 0) would be:
 
